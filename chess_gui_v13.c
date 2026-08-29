@@ -2431,37 +2431,6 @@ static void draw_captured(int x,int y,int white_side){
     if(white_side && md>0){char b[8];sprintf(b,"+%d",md);dtxt(cx+8,y+2,b,1,225,185,90);}
     if(!white_side && md<0){char b[8];sprintf(b,"+%d",-md);dtxt(cx+8,y+2,b,1,225,185,90);}
 }
-
-/* v13: fill the (often empty) captured-pieces panel with live position
-   statistics. Lines are kept SHORT (<= ~13 chars) so they never spill past
-   the narrow sidebar, and they are spread vertically to fill the panel. */
-static void draw_position_stats(int x,int y,int w,int h){
-    (void)w;
-    int wc[6]={0}, bc[6]={0}; /* 0=PAWN .. 4=QUEEN (5=KING) */
-    for(int r=0;r<8;r++) for(int c=0;c<8;c++){
-        int p=bb_piece_at_rc(&B,r,c);
-        if(p>0) wc[abs(p)-1]++;
-        else if(p<0) bc[abs(p)-1]++;
-    }
-    int wmat=wc[0]+wc[1]*3+wc[2]*3+wc[3]*5+wc[4]*9;
-    int bmat=bc[0]+bc[1]*3+bc[2]*3+bc[3]*5+bc[4]*9;
-    double diff=wmat-bmat;
-    char lines[12][40]; int n=0;
-    snprintf(lines[n++],40,"POSITION");
-    snprintf(lines[n++],40,"W B pc");
-    const char *abbr[5]={"P","N","B","R","Q"};
-    for(int t=0;t<5;t++) snprintf(lines[n++],40,"%d %d %s", wc[t], bc[t], abbr[t]);
-    snprintf(lines[n++],40,"Mat W-B %s%.1f", diff>=0?"+":"", diff);
-    snprintf(lines[n++],40,"Eval %+.2f", g_best_eval/100.0);
-    snprintf(lines[n++],40,"Mv %d  50mv:%d", hist_n/2+1, B.fifty);
-    int gap = h/(n+1); if(gap<12)gap=12; if(gap>20)gap=20;
-    for(int i=0;i<n;i++){
-        int R=205,G=205,Bb=205;
-        if(i==0){R=255;G=165;Bb=0;}
-        else if(i==n-3){ if(diff>=0){R=120;G=205;Bb=255;} else {R=235;G=120;Bb=120;} }
-        dtxt(x, y + (i+1)*gap - 7, lines[i], 1, R,G,Bb);
-    }
-}
 /* v12: small eval-history sparkline, drawn next to the material eval bar */
 static void draw_eval_sparkline(int x,int y,int w,int h){
     // CMD: more beautiful per-move eval graph
@@ -2753,17 +2722,20 @@ static void draw_sidebar(void){
         /* v13: keep the two capture rows near the top and use the (often large)
            remaining space for live position statistics, so the panel is never
            just empty when few pieces have been captured. */
+        /* v13: spread the two capture rows evenly across the panel's full height
+           instead of two fixed offsets — the panel is now much taller than the
+           original 96px (it fills the sidebar like every other panel), so the
+           fixed offsets used to leave most of the box empty. */
         {
-            int cy = sy+22;
-            dtxt(FRAME_W+8, cy, "W taken:",1, 170,170,170);
-            draw_captured(FRAME_W+8, cy+12, 1);
-            dtxt(FRAME_W+8, cy+34, "B taken:",1, 170,170,170);
-            draw_captured(FRAME_W+8, cy+46, 0);
-            /* v13: position stats immediately below the capture rows, spread
-               across the remaining panel height (never spills past it) */
-            int stats_top = cy+64;
-            int stats_h = (sy+cap_h-4) - stats_top;
-            if(stats_h >= 80) draw_position_stats(FRAME_W+8, stats_top, sw-16, stats_h);
+            int header_h=20;
+            int rows_h = cap_h-header_h-6; if(rows_h<40) rows_h=40;
+            int row_h = rows_h/2;
+            int row1_y = sy+header_h;
+            int row2_y = sy+header_h+row_h;
+            dtxt(FRAME_W+8, row1_y, "W taken:",1, 170,170,170);
+            draw_captured(FRAME_W+8, row1_y+14, 1);
+            dtxt(FRAME_W+8, row2_y, "B taken:",1, 170,170,170);
+            draw_captured(FRAME_W+8, row2_y+14, 0);
         }
     sy+=cap_h+6;
 
