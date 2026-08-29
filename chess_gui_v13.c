@@ -2861,8 +2861,14 @@ static void draw_sidebar(void){
                mark the engines actually assigned to White/Black; a human
                side gets no engine panel. */
             int pw=tourney_player[0], pb=tourney_player[1];
-            if(pw>=0 && pw<3) show[pw]=1;
-            if(pb>=0 && pb<3) show[pb]=1;
+            /* v13 FIX: tourney_player encodes 0=built-in,1=UCI1,2=UCI2,3=human,
+               but eng_analysis[] slots are 0=UCI1,1=UCI2,2=built-in. Map through
+               the SAME conversion start_ai_move() uses, otherwise UCI2 landed in
+               the built-in panel and UCI1/UCI2 panels got swapped. */
+            int spw = (pw==0)?ENG_BUILTIN_IDX:(pw==1?0:(pw==2?1:-1));
+            int spb = (pb==0)?ENG_BUILTIN_IDX:(pb==1?0:(pb==2?1:-1));
+            if(spw>=0) show[spw]=1;
+            if(spb>=0) show[spb]=1;
         } else {
             /* Normal (non AI-vs-AI) game: keep old behavior -- built-in is
                always available, plus whichever UCI engine(s) are loaded. */
