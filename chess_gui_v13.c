@@ -114,6 +114,19 @@ static int bottom_log_tab = 0; /* 0=Engines, 1=Log */
 static char bottom_log_lines[BOTTOM_LOG_MAX][128]; static int bottom_log_n=0;
 static void bottom_log_push(const char *s){ if(bottom_log_n<BOTTOM_LOG_MAX){ strncpy(bottom_log_lines[bottom_log_n],s,127); bottom_log_lines[bottom_log_n][127]=0; bottom_log_n++; } else { for(int i=1;i<BOTTOM_LOG_MAX;i++) strcpy(bottom_log_lines[i-1],bottom_log_lines[i]); strncpy(bottom_log_lines[BOTTOM_LOG_MAX-1],s,127); } }
 
+/* v13: copy the whole on-screen log to the system clipboard (key C) so it can
+   be pasted into a forum post / bug report. Works regardless of active tab. */
+static void copy_log_to_clipboard(void){
+    if(bottom_log_n==0){ bottom_log_push("LOG: nothing to copy"); return; }
+    size_t cap=(size_t)bottom_log_n*130+16; char *buf=malloc(cap);
+    if(!buf){ bottom_log_push("LOG: copy failed (out of memory)"); return; }
+    buf[0]=0;
+    for(int i=0;i<bottom_log_n;i++){ strncat(buf,bottom_log_lines[i],cap-1); strncat(buf,"\n",2); }
+    if(SDL_SetClipboardText(buf)==0) bottom_log_push("LOG: copied to clipboard");
+    else bottom_log_push("LOG: clipboard copy failed");
+    free(buf);
+}
+
 /* ---- AI constants ---- */
 #define TT_SIZE (1 << 20)
 #define INF     30000
@@ -2002,17 +2015,25 @@ static const char*TITEMS[]={
 };
 #define N_TOUR (sizeof(TITEMS)/sizeof(TITEMS[0]))
 static const char*HITEMS[]={
-    "U = Undo  F = Flip  M = Sound",
-    "Ctrl+S = Save PGN  R = New game",
-    "I = Infinite analysis",
-    "L = Load FEN  T = Tournament",
-    "Right-drag = Arrow",
-    "v13 CMD: black/gray/orange",
-    "Minimal flat design",
-    "Ponder: sidebar status",
-    "Per-engine panels w/ names"
+    "--- Keyboard ---",
+    "U        Undo last move",
+    "F        Flip board view",
+    "M        Toggle sound",
+    "R        New game (White)",
+    "I        Toggle analysis",
+    "L        Load position (FEN)",
+    "T        Start tournament",
+    "Ctrl+S    Save game as PGN",
+    "--- Mouse ---",
+    "Drag piece   Move a piece",
+    "Right-drag   Draw arrow",
+    "--- Menus ---",
+    "Game      New / Load / Save",
+    "Settings  Theme, Time, Ponder",
+    "Engine    Add / manage UCI",
+    "C         Copy log to clipboard"
 };
-#define N_HELP 9
+#define N_HELP 17
 static const char*OITEMS[]={
     "Engine 1 options...",
     "Engine 2 options...",
@@ -2040,7 +2061,7 @@ static void draw_menus(int mx,int my){
         int tw=strlen(MNAME[mi])*9+9;
         dtxt(bx+(mw-tw)/2,by+11,MNAME[mi],1,act?255:(hov?240:210),act?255:(hov?255:230),act?255:(hov?240:210));
         if(open_menu==mi){
-            int n=menu_count(mi),ih=26,iw=220,ix=bx,iy=MENU_H;
+            int n=menu_count(mi),ih=26,iw=(mi==5)?320:220,ix=bx,iy=MENU_H;
             if(ix+iw>WIN_W)ix=WIN_W-iw-2;
             frect(ix,iy,iw,n*ih+8,0,0,0);orect(ix,iy,iw,n*ih+8,90,90,90);
             for(int ii=0;ii<n;ii++){
@@ -2198,7 +2219,7 @@ static void handle_menu(int mx,int my){
         if(mx>=bx&&mx<=bx+mw&&my>=3&&my<=MENU_H-3){open_menu=(open_menu==mi)?-1:mi;return;}
     }
     if(open_menu>=0){
-        int mi=open_menu,n=menu_count(mi),ih=26,iw=220,ix=mx0+mi*(mw+gap),iy=MENU_H;
+        int mi=open_menu,n=menu_count(mi),ih=26,iw=(mi==5)?320:220,ix=mx0+mi*(mw+gap),iy=MENU_H;
         if(ix+iw>WIN_W)ix=WIN_W-iw-2;
         for(int ii=0;ii<n;ii++){
             int iy2=iy+4+ii*ih;
@@ -5258,6 +5279,8 @@ int main(void){
                     if(analysis_mode){ stop_analysis(); strcpy(msg,turn==player_color?"Your move":"Analysis stopped"); }
                     else { start_analysis(); }
                 }
+                /* v13: C = copy the on-screen log to the clipboard */
+                if(k==SDLK_c && !ctrl) copy_log_to_clipboard();
                 skip_normal_keys:;
             }
             /* v9: text input for FEN and path dialogs */
