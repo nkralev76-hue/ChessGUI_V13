@@ -1,0 +1,13 @@
+# Build artifacts / binaries
+*.exe
+*.dll
+
+# Logs
+*.log
+
+# Code-signing certificate (contains sensitive key material - do NOT commit)
+codesign_cert.pem
+
+# OS / editor cruft
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,2 @@
+gcc -O3 -march=native -mpopcnt -mavx2 -DUSE_BOOK -o chess_gui_v9.exe chess_gui_v9.c -lSDL2 -lSDL2_image -lm -lcomdlg32
+gcc -O3 -march=native -mpopcnt -mavx2 -DUSE_BOOK -o chess_gui_v11.exe chess_gui_v11.c -lSDL2 -lSDL2_image -lm -lcomdlg32 -mwindows
