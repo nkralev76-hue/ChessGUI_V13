@@ -2232,13 +2232,13 @@ static void handle_menu(int mx,int my){
             if(mx>=ix&&mx<ix+iw&&my>=iy2&&my<iy2+ih){
                 open_menu=-1;
                 if(mi==0){
-                    if(ii==0){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;flip_board=0;aivsai=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    if(ii==0){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"Your move (White)");}
-                    else if(ii==1){stop_analysis();stop_pondering();stop_ai();player_color=BLACK;flip_board=0;aivsai=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    else if(ii==1){stop_analysis();stop_pondering();stop_ai();player_color=BLACK;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"Computer thinking...");}
-                    else if(ii==2){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;aivsai=1;init_board();turn=WHITE;game_start_fen[0]=0;
+                    else if(ii==2){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;aivsai=1;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"AI vs AI");}
                     else if(ii==3){open_menu=-1;fen_dialog_active=1;fen_dialog_buf[0]=0;fen_dialog_len=0;SDL_StartTextInput();}
@@ -4947,11 +4947,34 @@ static void tourney_begin_game(void){
     if(w!=2) start_ai_move();
 }
 
+/* v13: if a side is still the built-in engine (0) but a real UCI engine is
+   loaded and ready, promote it so a freshly started tournament actually plays
+   the external engines the user just loaded — instead of the built-in silently
+   continuing to play. Only a side left at the built-in default is promoted; an
+   explicit W: Built-in / B: Built-in choice in the Tournament menu is kept. */
+static void tourney_autoset_players(void){
+    int r0=uci_eng[0].ready, r1=uci_eng[1].ready;
+    for(int s=0;s<2;s++){
+        if(tourney_player[s]!=0) continue;
+        if(s==0){
+            if(r0) tourney_player[0]=1;
+            else if(r1 && tourney_player[1]!=2) tourney_player[0]=2;
+        } else {
+            if(r1) tourney_player[1]=2;
+            else if(r0 && tourney_player[0]!=1) tourney_player[1]=1;
+        }
+    }
+}
+
 static void tourney_start_now(void){
+    tourney_autoset_players();
     tourney_active=1;tourney_played=0;
     tourney_score[0]=tourney_score[1]=0;
     tourney_waiting=0;
     tourney_e1_engine=tourney_player[0]; /* remember who E1 is */
+    char _tpmsg[64]; snprintf(_tpmsg,sizeof _tpmsg,"Tournament: W=%d B=%d (0=builtin,1=E1,2=E2)",
+        tourney_player[0], tourney_player[1]);
+    uci_dbg_log("TOURN", -1, _tpmsg);
     tourney_begin_game();
 }
 
@@ -5261,7 +5284,7 @@ int main(void){
                     }
                     goto skip_normal_keys;
                 }
-                if(k==SDLK_r){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;flip_board=0;aivsai=0;init_board();game_start_fen[0]=0;
+                if(k==SDLK_r){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();game_start_fen[0]=0;
                     /* v10 FIX: ucinewgame on new game */
                     for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                     strcpy(msg,"Your move (White)");}
@@ -5278,7 +5301,7 @@ int main(void){
                 /* v9: T = toggle tournament */
                 if(k==SDLK_t&&!ctrl){
                     if(tourney_active)tourney_stop();
-                    else{tourney_total=10;tourney_player[0]=0;tourney_player[1]=1;tourney_start_now();}
+                    else{tourney_total=10;tourney_player[0]=1;tourney_player[1]=2;tourney_start_now();}
                 }
                 /* v8.3.1: I = toggle infinite analysis */
                 if(k==SDLK_i){
