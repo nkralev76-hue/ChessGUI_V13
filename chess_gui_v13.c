@@ -4067,6 +4067,27 @@ static int uci_recv_line(int ei, char *buf, int maxlen, int timeout_ms){
     return 0;
 }
 
+/* v13: crash watchdog — logs when an engine process dies (Arena-style),
+   so the debug log is useful for diagnosing engine crashes. Engine stderr
+   is already merged into the same pipe as stdout, so the actual crash text
+   shows up as RECV lines above this message. */
+static int uci_crash_logged[MAX_ENGINES]={0};
+static void uci_watchdog(void){
+    for(int ei=0;ei<MAX_ENGINES;ei++){
+        if(uci_eng[ei].ready && uci_hproc[ei] && !uci_crash_logged[ei]){
+            DWORD c;
+            if(GetExitCodeProcess(uci_hproc[ei],&c) && c!=STILL_ACTIVE){
+                char m[300];
+                snprintf(m,sizeof m,
+                    "ENGINE CRASHED/EXITED (exit code %u) — last stderr lines above; engine path: %s",
+                    (unsigned)c, uci_eng[ei].path);
+                uci_dbg_log("CRASH", ei, m);
+                uci_crash_logged[ei]=1;
+            }
+        }
+    }
+}
+
 static int uci_spawn_engine(int ei, const char *path){
     if(ei<0||ei>=MAX_ENGINES) return 0;
     SECURITY_ATTRIBUTES sa={sizeof(sa),NULL,TRUE};
@@ -4085,10 +4106,14 @@ static int uci_spawn_engine(int ei, const char *path){
     char cmd[260]; strncpy(cmd,path,259);
     if(!CreateProcessA(NULL,cmd,NULL,NULL,TRUE,CREATE_NO_WINDOW,NULL,NULL,&si,&pi)){
         CloseHandle(chin_r);CloseHandle(chin_w);
-        CloseHandle(cout_r);CloseHandle(cout_w); return 0;
+        CloseHandle(cout_r);CloseHandle(cout_w);
+        { char m[300]; snprintf(m,sizeof m,"CreateProcess FAILED for %s (Win32 error %u)", path, (unsigned)GetLastError()); uci_dbg_log("ENGINE", ei, m); }
+        return 0;
     }
     CloseHandle(chin_r); CloseHandle(cout_w); CloseHandle(pi.hThread);
     uci_hproc[ei]=pi.hProcess; uci_hin[ei]=chin_w; uci_hout[ei]=cout_r;
+    uci_crash_logged[ei]=0;
+    { char m[300]; snprintf(m,sizeof m,"engine started: %s", path); uci_dbg_log("ENGINE", ei, m); }
 
     /* Parse UCI options during handshake */
     UCIOption *opts = uci_eng[ei].options;
@@ -4201,6 +4226,7 @@ static void uci_close_engine(int ei){
         WaitForSingleObject(uci_hproc[ei],600);
         TerminateProcess(uci_hproc[ei],0);
         CloseHandle(uci_hproc[ei]); uci_hproc[ei]=NULL;
+        { char m[300]; snprintf(m,sizeof m,"engine closed: %s", uci_eng[ei].path); uci_dbg_log("ENGINE", ei, m); }
     }
     if(uci_hin[ei]) {CloseHandle(uci_hin[ei]); uci_hin[ei]=NULL;}
     if(uci_hout[ei]){CloseHandle(uci_hout[ei]);uci_hout[ei]=NULL;}
@@ -5110,6 +5136,7 @@ int main(void){
     SDL_Event e;int run=1,mx=0,my=0;
     while(run){
         Uint32 now=SDL_GetTicks();Uint32 dt=now-last_ms;last_ms=now;
+        uci_watchdog(); /* v13: detect engine crashes for the debug log */
         /* v12.9: clocks stay frozen until the first move is played */
         if(!game_over&&!promo_pending&&clock_started){
             if(turn==WHITE){if(clk_w>dt)clk_w-=dt;else{clk_w=0;game_over=1;if(ponder_running)stop_pondering();if(ai_thinking)stop_ai();strcpy(msg,"Time! Black wins");tourney_record_result();}}
