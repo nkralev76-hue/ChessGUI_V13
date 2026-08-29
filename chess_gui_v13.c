@@ -2732,8 +2732,19 @@ static void draw_sidebar(void){
     // compute uniform panel height so ALL sidebar panels are equal size and
     // together fill the full available sidebar height (request: panels should
     // maximally use the screen and, where possible, be the same size).
-    int show_e_tmp[3]={0,0,0}; show_e_tmp[2]=1; if(uci_eng[0].ready||eng_analysis[0].has_data) show_e_tmp[0]=1; if(uci_eng[1].ready||eng_analysis[1].has_data) show_e_tmp[1]=1;
-    int num_eng_tmp = show_e_tmp[0]+show_e_tmp[1]+show_e_tmp[2];
+    int num_eng_tmp;
+    if(tourney_active || aivsai){
+        /* v13: one panel per side (White/Black) so AI-vs-AI always shows two
+           engine panels even when both sides use the built-in engine. A human
+           side contributes no panel. */
+        int pw=tourney_player[0], pb=tourney_player[1];
+        num_eng_tmp = (pw!=3?1:0) + (pb!=3?1:0);
+        if(num_eng_tmp<1) num_eng_tmp=1;
+    } else {
+        num_eng_tmp = 1; /* built-in always */
+        if(uci_eng[0].ready||eng_analysis[0].has_data) num_eng_tmp++;
+        if(uci_eng[1].ready||eng_analysis[1].has_data) num_eng_tmp++;
+    }
     int has_tourney = (tourney_active||tourney_played>0)?1:0;
     int num_uniform = 3 + num_eng_tmp + has_tourney; // CAPTURED + EVAL + MOVES + engines + tourney
     // top margin (8) + bottom ponder bar (24) + its own margin (8) + one 6px
@@ -2855,54 +2866,44 @@ static void draw_sidebar(void){
            same white/black -> engine mapping that start_ai_move() uses
            (tourney_player[]/aivsai) so the panels shown always match who is
            actually assigned to play. */
-        int show[3]={0,0,0};
+        /* v13: build the engine-panel list. In AI-vs-AI / tournament mode we show
+           ONE panel per SIDE (White and Black) so there are always two engine
+           panels -- even when both sides use the built-in engine. A human side
+           gets no panel. In normal mode we keep the old behaviour: the built-in
+           panel plus whichever UCI engine(s) are loaded. */
+        int panel_slot[3]; int panel_side[3]; int npan=0;
+        int on_move_side = -1;
         if(tourney_active || aivsai){
-            /* 0=built-in, 1=UCI engine 1, 2=UCI engine 2, 3=human -- only
-               mark the engines actually assigned to White/Black; a human
-               side gets no engine panel. */
             int pw=tourney_player[0], pb=tourney_player[1];
-            /* v13 FIX: tourney_player encodes 0=built-in,1=UCI1,2=UCI2,3=human,
-               but eng_analysis[] slots are 0=UCI1,1=UCI2,2=built-in. Map through
-               the SAME conversion start_ai_move() uses, otherwise UCI2 landed in
-               the built-in panel and UCI1/UCI2 panels got swapped. */
+            /* tourney_player encodes 0=built-in,1=UCI1,2=UCI2,3=human, but
+               eng_analysis[] slots are 0=UCI1,1=UCI2,2=built-in. */
             int spw = (pw==0)?ENG_BUILTIN_IDX:(pw==1?0:(pw==2?1:-1));
             int spb = (pb==0)?ENG_BUILTIN_IDX:(pb==1?0:(pb==2?1:-1));
-            if(spw>=0) show[spw]=1;
-            if(spb>=0) show[spb]=1;
+            if(pw!=3 && spw>=0){ panel_slot[npan]=spw; panel_side[npan]=0; npan++; }
+            if(pb!=3 && spb>=0){ panel_slot[npan]=spb; panel_side[npan]=1; npan++; }
+            on_move_side = (turn==WHITE)?0:1;
         } else {
-            /* Normal (non AI-vs-AI) game: keep old behavior -- built-in is
-               always available, plus whichever UCI engine(s) are loaded. */
-            show[2]=1; /* built-in always */
-            if(uci_eng[0].ready || eng_analysis[0].has_data) show[0]=1;
-            if(uci_eng[1].ready || eng_analysis[1].has_data) show[1]=1;
+            panel_slot[npan]=ENG_BUILTIN_IDX; panel_side[npan]=-1; npan++;
+            if(uci_eng[0].ready||eng_analysis[0].has_data){ panel_slot[npan]=0; panel_side[npan]=-1; npan++; }
+            if(uci_eng[1].ready||eng_analysis[1].has_data){ panel_slot[npan]=1; panel_side[npan]=-1; npan++; }
         }
-        int cnt_show = show[0]+show[1]+show[2];
         int per_h = dyn_panel_h; /* uniform, fills the sidebar together with the other panels */
-        /* v13 FIX (part 2): which engine slot is actually "on the move" right
-           now. Previously the built-in row lit up on ai_thinking && !use_uci_engine
-           -- but use_uci_engine is the single-opponent-mode selector and is
-           NEVER updated to reflect the tournament/AI-vs-AI W/B assignment, so
-           during a tournament between two external engines (built-in never
-           assigned to either side) ai_thinking was still true whenever EITHER
-           engine searched, and use_uci_engine happened to be left at 0 from
-           before the tournament started -- so the built-in row incorrectly lit
-           up "THINKING" for a move it never touched. Mirror the same
-           tourney_player[]-based mapping start_ai_move() actually uses to pick
-           a mover so this can never point at the wrong engine again. */
-        int on_move_slot = -1; /* 0=UCI1, 1=UCI2, ENG_BUILTIN_IDX=built-in, -1=none (human) */
+        int on_move_slot = -1; /* used in NORMAL mode; in aivsai/tourney on_move_side drives the highlight */
         if(tourney_active || aivsai){
             int tp = (turn==WHITE) ? tourney_player[0] : tourney_player[1];
             if(tp==0) on_move_slot = ENG_BUILTIN_IDX;
             else if(tp==1) on_move_slot = 0;
             else if(tp==2) on_move_slot = 1;
-            /* tp==3 -> human on move, no engine slot lights up */
         } else {
             on_move_slot = use_uci_engine ? active_engine : ENG_BUILTIN_IDX;
         }
-        for(int ei=0; ei<3; ei++){
-            if(!show[ei]) continue;
+        for(int pi=0; pi<npan; pi++){
+            int ei = panel_slot[pi];
+            int side = panel_side[pi];
             /* CMD panel — black with orange when thinking, gray otherwise */
-            int is_active_thinking = eng_analysis[ei].is_thinking || (ai_thinking && ei==on_move_slot);
+            int is_active_thinking = (tourney_active||aivsai)
+                ? (side>=0 && side==on_move_side)
+                : (eng_analysis[ei].is_thinking || (ai_thinking && ei==on_move_slot));
             int bgR = is_active_thinking? 16:0, bgG=is_active_thinking?12:0, bgB=is_active_thinking?0:0;
             int borR=is_active_thinking?255:60, borG=is_active_thinking?165:60, borB=is_active_thinking?0:60;
             frect(FRAME_W+4,sy,panel_w,per_h, bgR,bgG,bgB);
@@ -2923,7 +2924,8 @@ static void draw_sidebar(void){
                 snprintf(ename,sizeof(ename),"%s", n);
             }
             char hdr[120];
-            snprintf(hdr,sizeof(hdr),"%s%s", ename, is_active_thinking?" *THINKING*":"");
+            const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
+            snprintf(hdr,sizeof(hdr),"%s%s%s", side_lbl, ename, is_active_thinking?" *THINKING*":"");
             int maxch=(panel_w-16)/9; if((int)strlen(hdr)>maxch){ hdr[maxch-3]=0; strcat(hdr,"..."); }
             dtxt(FRAME_W+9, sy+5, hdr, 1, 0,0,0);
             dtxt(FRAME_W+8, sy+4, hdr, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
@@ -2993,9 +2995,9 @@ static void draw_sidebar(void){
         const char *opn=current_opening_name();
         if(opn[0]){
             char ob[64]; snprintf(ob,sizeof(ob),"%s",opn);
-            int maxch=(moves_w-60)/9; if(maxch<10)maxch=10;
+            int maxch=(moves_w-76)/9; if(maxch<10)maxch=10;
             if((int)strlen(ob)>maxch){ob[maxch-3]=0;strcat(ob,"...");}
-            dtxt(FRAME_W+8+44,sy+4,ob,1,130,130,130);
+            dtxt(FRAME_W+8+56,sy+4,ob,1,130,130,130);
         }
     }
     static const char*PCL[7]={"","","N","B","R","Q","K"};
