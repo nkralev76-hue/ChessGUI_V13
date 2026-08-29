@@ -2431,6 +2431,36 @@ static void draw_captured(int x,int y,int white_side){
     if(white_side && md>0){char b[8];sprintf(b,"+%d",md);dtxt(cx+8,y+2,b,1,225,185,90);}
     if(!white_side && md<0){char b[8];sprintf(b,"+%d",-md);dtxt(cx+8,y+2,b,1,225,185,90);}
 }
+
+/* v13: compact material-balance meter drawn in the (otherwise empty) middle of
+   the captured-pieces panel. Fully bounded inside the panel — never spills out. */
+static void draw_material_meter(int x,int cy,int w){
+    int wc[6]={0}, bc[6]={0}; /* 0=PAWN .. 4=QUEEN */
+    for(int r=0;r<8;r++) for(int c=0;c<8;c++){
+        int p=bb_piece_at_rc(&B,r,c);
+        if(p>0) wc[abs(p)-1]++; else if(p<0) bc[abs(p)-1]++;
+    }
+    int wm=wc[0]+wc[1]*3+wc[2]*3+wc[3]*5+wc[4]*9;
+    int bm=bc[0]+bc[1]*3+bc[2]*3+bc[3]*5+bc[4]*9;
+    double diff=wm-bm; /* pawns, White perspective */
+    int bw=w-16, bx=x+8, bh=14, by=cy-bh/2;
+    dtxt(x, by-13, "MATERIAL",1,255,165,0);
+    frect(bx,by,bw,bh,22,22,22); orect(bx,by,bw,bh,70,70,70);
+    int center=bx+bw/2;
+    int total=2000; /* 20 pawns full scale */
+    if(diff>0){
+        int pw=(int)(bw/2*(diff*100.0/total)); if(pw>bw/2)pw=bw/2;
+        frect(center,by,pw,bh,80,140,235);
+    } else {
+        int pw=(int)(bw/2*(-diff*100.0/total)); if(pw>bw/2)pw=bw/2;
+        frect(center-pw,by,pw,bh,235,150,60);
+    }
+    char s[24];
+    snprintf(s,sizeof s,"W %s%.1f", diff>=0?"+":"", diff);
+    dtxt(bx, by+bh+4, s,1, 180,200,255);
+    snprintf(s,sizeof s,"B %s%.1f", diff<=0?"+":"", -diff);
+    dtxt(bx+bw-(int)strlen(s)*9, by+bh+4, s,1, 255,200,120);
+}
 /* v12: small eval-history sparkline, drawn next to the material eval bar */
 static void draw_eval_sparkline(int x,int y,int w,int h){
     // CMD: more beautiful per-move eval graph
@@ -2736,6 +2766,12 @@ static void draw_sidebar(void){
             draw_captured(FRAME_W+8, row1_y+14, 1);
             dtxt(FRAME_W+8, row2_y, "B taken:",1, 170,170,170);
             draw_captured(FRAME_W+8, row2_y+14, 0);
+            /* v13: fill the empty middle of the panel with a bounded material
+               meter (only when the panel is tall enough to host it) */
+            if(rows_h > 90){
+                int mid_y = row1_y + (row2_y - row1_y)/2;
+                draw_material_meter(FRAME_W+8, mid_y, sw-16);
+            }
         }
     sy+=cap_h+6;
 
