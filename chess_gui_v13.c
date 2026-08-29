@@ -2958,13 +2958,14 @@ static void draw_sidebar(void){
             int maxch=(panel_w-16)/9; if((int)strlen(hdr)>maxch){ hdr[maxch-3]=0; strcat(hdr,"..."); }
             dtxt(FRAME_W+9, sy+5, hdr, 1, 0,0,0);
             dtxt(FRAME_W+8, sy+4, hdr, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
-            /* thinking indicator — colored dot (blinking orange while searching)
-               instead of the old *THINKING* text */
+            /* thinking indicator — colored dot per side (green for White, blue
+               for Black), blinking while searching, instead of the old *THINKING* text */
             {
                 int dx=FRAME_W+4+panel_w-12, dy=sy+10;
+                int dotR = (side==1)?70:70, dotG = (side==1)?140:200, dotB = (side==1)?255:120;
                 if(is_active_thinking){
                     int blink=(SDL_GetTicks()/350)%2;
-                    fcircle(dx,dy,4, blink?255:200, blink?165:110, 0);
+                    fcircle(dx,dy,4, blink?dotR:dotR*0.65, blink?dotG:dotG*0.65, blink?dotB:dotB*0.65);
                 } else {
                     fcircle(dx,dy,3, 70,70,70);
                 }
@@ -5354,8 +5355,8 @@ int main(void){
                         window) — this was why the ENGINES/LOG tabs looked unresponsive. */
                     int my=e.button.y, mx=e.button.x;
                     if(my>=y0 && my < y0+18){
-                        int tab_w=80;
-                        for(int t=0;t<2;t++){
+                        int tab_w=70;
+                        for(int t=0;t<3;t++){
                             int tx=8+t*(tab_w+6);
                             if(mx>=tx && mx<tx+tab_w){ bottom_log_tab=t; char tmsg[48]; snprintf(tmsg,sizeof(tmsg),"TAB -> %s", t==0?"Out1":t==1?"Out2":"Log"); bottom_log_push(tmsg); goto skip; }
                         }
