@@ -115,13 +115,20 @@ static char bottom_log_lines[BOTTOM_LOG_MAX][128]; static int bottom_log_n=0;
 static void bottom_log_push(const char *s){ if(bottom_log_n<BOTTOM_LOG_MAX){ strncpy(bottom_log_lines[bottom_log_n],s,127); bottom_log_lines[bottom_log_n][127]=0; bottom_log_n++; } else { for(int i=1;i<BOTTOM_LOG_MAX;i++) strcpy(bottom_log_lines[i-1],bottom_log_lines[i]); strncpy(bottom_log_lines[BOTTOM_LOG_MAX-1],s,127); } }
 
 /* which engine slot a log line belongs to: 0 = Engine 1 (E1), 1 = Engine 2
-   (E2), -1 = neither (game/status messages). Used to split the bottom log into
-   per-engine Out1 / Out2 tabs. */
+   (E2), -1 = neither (game/status messages). The on-screen buffer is written as
+   "[DIR NUM] rest..." (see uci_dbg_log), so we parse the integer right before
+   the closing ']': 0 -> E1, 1 -> E2, anything else -> Log. Used to split the
+   bottom log into per-engine Out1 / Out2 tabs. */
 static int bottom_log_engine(const char *ln){
-    if(strstr(ln,"e0]")||strstr(ln,"[ENGINE 0]")||strstr(ln,"[PONDER 0]")||
-       strstr(ln,"[PONDER-HIT 0]")||strstr(ln,"[PONDER-BEST 0]")) return 0;
-    if(strstr(ln,"e1]")||strstr(ln,"[ENGINE 1]")||strstr(ln,"[PONDER 1]")||
-       strstr(ln,"[PONDER-HIT 1]")||strstr(ln,"[PONDER-BEST 1]")) return 1;
+    if(ln[0] != '[') return -1;
+    const char *br = strchr(ln, ']');
+    if(!br || br==ln+1) return -1;
+    const char *sp = NULL;
+    for(const char *p=ln+1; p<br; p++) if(*p==' ') sp=p;
+    if(!sp) return -1;
+    int e = atoi(sp+1);
+    if(e==0) return 0;
+    if(e==1) return 1;
     return -1;
 }
 
