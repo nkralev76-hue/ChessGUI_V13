@@ -2072,7 +2072,7 @@ static void draw_menus(int mx,int my){
                     if(ii==18&&base_time==120*60*1000&&increment==0)mk=1;
                     if(ii==20&&base_time==5*60*1000&&increment==3*1000)mk=1;
                     if(ii==21&&base_time==4*60*1000&&increment==2*1000)mk=1;
-                    if(ii==23&&use_ponder)mk=1;
+                    if(ii==24&&use_ponder)mk=1;
                 }
                 if(mi==2){
                     if(ii==1&&!use_uci_engine)mk=1;
@@ -2238,7 +2238,7 @@ static void handle_menu(int mx,int my){
                     else if(ii==18){base_time=120*60*1000;increment=0;}
                     else if(ii==20){base_time=5*60*1000;increment=3*1000;}
                     else if(ii==21){base_time=4*60*1000;increment=2*1000;}
-                    else if(ii==23){ use_ponder=!use_ponder; if(!use_ponder){ stop_pondering(); cancel_uci_ponder(); } }
+                    else if(ii==24){ use_ponder=!use_ponder; if(!use_ponder){ stop_pondering(); cancel_uci_ponder(); } }
                     if(ii>=12&&ii<=21){ char _dbg[96]; snprintf(_dbg,sizeof _dbg,
                         "Settings menu ii=%d clicked -> base_time=%u increment=%u",
                         ii, base_time, increment); uci_dbg_log("CLOCK", -1, _dbg); }
@@ -2794,7 +2794,9 @@ static void draw_sidebar(void){
         char evb[16]; if(disp_ev>9000) strcpy(evb,"M+"); else if(disp_ev<-9000) strcpy(evb,"M-"); else sprintf(evb,"%+.1f",disp_ev/100.0);
         int evcol=disp_ev>=0?255:100, evG=disp_ev>=0?165:160, evB=disp_ev>=0?0:255;
         dtxt(bar_x+bw+6, bar_y+bh/2-4, evb,1,evcol,evG,evB);
-        int spx=bar_x+bw+36, spw=(sw-8) - (bw+44); if(spw<60) spw=60;
+        /* FIX: start the sparkline AFTER the eval text (max ~36px wide) so
+           the last digit no longer overlaps the graph. */
+        int spx=bar_x+bw+48, spw=(sw-8) - (bw+56); if(spw<60) spw=60;
         draw_eval_sparkline(spx, bar_y, spw, bh);
     }
     sy+=dyn_panel_h+6;
