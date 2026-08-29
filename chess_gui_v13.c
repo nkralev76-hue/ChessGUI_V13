@@ -2084,15 +2084,15 @@ static void draw_menus(int mx,int my){
                     if(ii==0&&sound_on)mk=1; if(ii==1&&flip_board)mk=1; if(ii==2&&use_book)mk=1;
                     if(ii==4&&cur_theme==0)mk=1; if(ii==5&&cur_theme==1)mk=1; if(ii==6&&cur_theme==2)mk=1; if(ii==7&&cur_theme==3)mk=1;
                     if(ii==8&&cur_theme==7)mk=1; if(ii==9&&cur_theme==4)mk=1; if(ii==10&&cur_theme==5)mk=1; if(ii==11&&cur_theme==6)mk=1;
-                    if(ii==12&&base_time==1*60*1000&&increment==0)mk=1;
-                    if(ii==13&&base_time==3*60*1000&&increment==0)mk=1;
-                    if(ii==14&&base_time==5*60*1000&&increment==0)mk=1;
-                    if(ii==15&&base_time==10*60*1000&&increment==0)mk=1;
-                    if(ii==16&&base_time==30*60*1000&&increment==0)mk=1;
-                    if(ii==17&&base_time==60*60*1000&&increment==0)mk=1;
-                    if(ii==18&&base_time==120*60*1000&&increment==0)mk=1;
-                    if(ii==20&&base_time==5*60*1000&&increment==3*1000)mk=1;
-                    if(ii==21&&base_time==4*60*1000&&increment==2*1000)mk=1;
+                    if(ii==13&&base_time==1*60*1000&&increment==0)mk=1;
+                    if(ii==14&&base_time==3*60*1000&&increment==0)mk=1;
+                    if(ii==15&&base_time==5*60*1000&&increment==0)mk=1;
+                    if(ii==16&&base_time==10*60*1000&&increment==0)mk=1;
+                    if(ii==17&&base_time==30*60*1000&&increment==0)mk=1;
+                    if(ii==18&&base_time==60*60*1000&&increment==0)mk=1;
+                    if(ii==19&&base_time==120*60*1000&&increment==0)mk=1;
+                    if(ii==21&&base_time==5*60*1000&&increment==3*1000)mk=1;
+                    if(ii==22&&base_time==4*60*1000&&increment==2*1000)mk=1;
                     if(ii==24&&use_ponder)mk=1;
                 }
                 if(mi==2){
@@ -2259,17 +2259,17 @@ static void handle_menu(int mx,int my){
                     else if(ii==9){cur_theme=4;}
                     else if(ii==10){cur_theme=5;}
                     else if(ii==11){cur_theme=6;}
-                    else if(ii==12){base_time=1*60*1000;increment=0;}
-                    else if(ii==13){base_time=3*60*1000;increment=0;}
-                    else if(ii==14){base_time=5*60*1000;increment=0;}
-                    else if(ii==15){base_time=10*60*1000;increment=0;}
-                    else if(ii==16){base_time=30*60*1000;increment=0;}
-                    else if(ii==17){base_time=60*60*1000;increment=0;}
-                    else if(ii==18){base_time=120*60*1000;increment=0;}
-                    else if(ii==20){base_time=5*60*1000;increment=3*1000;}
-                    else if(ii==21){base_time=4*60*1000;increment=2*1000;}
+                    else if(ii==13){base_time=1*60*1000;increment=0;}
+                    else if(ii==14){base_time=3*60*1000;increment=0;}
+                    else if(ii==15){base_time=5*60*1000;increment=0;}
+                    else if(ii==16){base_time=10*60*1000;increment=0;}
+                    else if(ii==17){base_time=30*60*1000;increment=0;}
+                    else if(ii==18){base_time=60*60*1000;increment=0;}
+                    else if(ii==19){base_time=120*60*1000;increment=0;}
+                    else if(ii==21){base_time=5*60*1000;increment=3*1000;}
+                    else if(ii==22){base_time=4*60*1000;increment=2*1000;}
                     else if(ii==24){ use_ponder=!use_ponder; if(!use_ponder){ stop_pondering(); cancel_uci_ponder(); } }
-                    if(ii>=12&&ii<=21){ char _dbg[96]; snprintf(_dbg,sizeof _dbg,
+                    if(ii>=13&&ii<=22){ char _dbg[96]; snprintf(_dbg,sizeof _dbg,
                         "Settings menu ii=%d clicked -> base_time=%u increment=%u",
                         ii, base_time, increment); uci_dbg_log("CLOCK", -1, _dbg); }
                 }
