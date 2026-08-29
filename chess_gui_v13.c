@@ -2431,6 +2431,43 @@ static void draw_captured(int x,int y,int white_side){
     if(white_side && md>0){char b[8];sprintf(b,"+%d",md);dtxt(cx+8,y+2,b,1,225,185,90);}
     if(!white_side && md<0){char b[8];sprintf(b,"+%d",-md);dtxt(cx+8,y+2,b,1,225,185,90);}
 }
+
+/* v13: fill the (often empty) captured-pieces panel with live position
+   statistics so the tall panel is never just wasted space. */
+static void draw_position_stats(int x,int y,int w,int h){
+    (void)w;
+    int wc[6]={0}, bc[6]={0}; /* 0=PAWN .. 4=QUEEN (5=KING) */
+    for(int r=0;r<8;r++) for(int c=0;c<8;c++){
+        int p=bb_piece_at_rc(&B,r,c);
+        if(p>0) wc[abs(p)-1]++;
+        else if(p<0) bc[abs(p)-1]++;
+    }
+    int wmat=wc[0]*1+wc[1]*3+wc[2]*3+wc[3]*5+wc[4]*9;
+    int bmat=bc[0]*1+bc[1]*3+bc[2]*3+bc[3]*5+bc[4]*9;
+    double diff=wmat-bmat;
+    dtxt(x+1,y-1,"POSITION",1,255,165,0);
+    dtxt(x,  y,  "POSITION",1,0,0,0);
+    int ly=y+14;
+    dtxt(x,   ly, "W",1,210,210,210);
+    dtxt(x+24,ly, "B",1,210,210,210);
+    dtxt(x+48,ly, "piece",1,150,150,150);
+    ly+=13;
+    const char *abbr[5]={"P","N","B","R","Q"};
+    for(int t=0;t<5;t++){
+        char ln[16]; snprintf(ln,sizeof ln,"%d", wc[t]);
+        dtxt(x,   ly, ln,1,235,235,235);
+        snprintf(ln,sizeof ln,"%d", bc[t]);
+        dtxt(x+24,ly, ln,1,235,235,235);
+        dtxt(x+48,ly, abbr[t],1,170,170,170);
+        ly+=13;
+    }
+    char mb[48]; snprintf(mb,sizeof mb,"Material (W-B): %s%.1f", diff>=0?"+":"", diff);
+    dtxt(x, ly, mb,1, diff>=0?120:235, diff>=0?205:120, diff>=0?255:120); ly+=14;
+    char ev[32]; snprintf(ev,sizeof ev,"Engine eval: %+.2f", g_best_eval/100.0);
+    dtxt(x, ly, ev,1,210,210,210); ly+=14;
+    char mc[48]; snprintf(mc,sizeof mc,"Move %d   50-move clock: %d", hist_n/2+1, B.fifty);
+    dtxt(x, ly, mc,1,150,150,150);
+}
 /* v12: small eval-history sparkline, drawn next to the material eval bar */
 static void draw_eval_sparkline(int x,int y,int w,int h){
     // CMD: more beautiful per-move eval graph
@@ -2719,21 +2756,19 @@ static void draw_sidebar(void){
         // move further right to avoid overlap with CAPTURED (was 70, now 90)
         dtxt(FRAME_W+8+90, sy+4, turn_s,1, turn==WHITE?220:120, turn==WHITE?220:170, turn==WHITE?220:80);
     }
-    /* v13: spread the two capture rows evenly across the panel's full height
-       instead of two fixed offsets — the panel is now much taller than the
-       original 96px (it fills the sidebar like every other panel), so the
-       fixed offsets used to leave most of the box empty. */
-    {
-        int header_h=20;
-        int rows_h = cap_h-header_h-6; if(rows_h<40) rows_h=40;
-        int row_h = rows_h/2;
-        int row1_y = sy+header_h;
-        int row2_y = sy+header_h+row_h;
-        dtxt(FRAME_W+8, row1_y, "W taken:",1, 170,170,170);
-        draw_captured(FRAME_W+8, row1_y+14, 1);
-        dtxt(FRAME_W+8, row2_y, "B taken:",1, 170,170,170);
-        draw_captured(FRAME_W+8, row2_y+14, 0);
-    }
+        /* v13: keep the two capture rows near the top and use the (often large)
+           remaining space for live position statistics, so the panel is never
+           just empty when few pieces have been captured. */
+        {
+            int cy = sy+22;
+            dtxt(FRAME_W+8, cy, "W taken:",1, 170,170,170);
+            draw_captured(FRAME_W+8, cy+12, 1);
+            dtxt(FRAME_W+8, cy+34, "B taken:",1, 170,170,170);
+            draw_captured(FRAME_W+8, cy+46, 0);
+            int stats_y = (sy+cap_h-4) - 120; if(stats_y < cy+62) stats_y = cy+62;
+            int stats_avail = (sy+cap_h-4) - stats_y;
+            if(stats_avail > 70) draw_position_stats(FRAME_W+8, stats_y, sw-16, stats_avail);
+        }
     sy+=cap_h+6;
 
     /* Tournament scoreboard — uniform */
@@ -2779,8 +2814,8 @@ static void draw_sidebar(void){
         dtxt(FRAME_W+8+50,sy+4,di,1,ecol,ecol,ecol);
         // ponder dot in this panel
         int is_ponder_on=use_ponder; int is_th=ai_thinking||ponder_running||uci_ponder_alive||uci_ponder_waiting;
-        if(is_ponder_on&&is_th){ int blink=(SDL_GetTicks()/400)%2; if(blink) fcircle(FRAME_W+4+sw-12,sy+8,4,255,165,0); else fcircle(FRAME_W+4+sw-12,sy+8,4,60,40,0); }
-        else fcircle(FRAME_W+4+sw-12,sy+8,3,70,70,70);
+        if(is_ponder_on&&is_th){ int blink=(SDL_GetTicks()/400)%2; if(blink) fcircle(FRAME_W+4+sw-26,sy+8,4,255,165,0); else fcircle(FRAME_W+4+sw-26,sy+8,4,60,40,0); }
+        else fcircle(FRAME_W+4+sw-26,sy+8,3,70,70,70);
     }
     int evfl = flip_board ^ (player_color==BLACK ? 1 : 0);
     int disp_ev = evfl ? -g_best_eval : g_best_eval;
