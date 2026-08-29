@@ -127,6 +127,18 @@ static void copy_log_to_clipboard(void){
     free(buf);
 }
 
+/* v13: a log line is "raw UCI protocol" (shown in the Output tab) when it is a
+   RECV/SEND/ENGINE/CRASH/PART engine-traffic line — as opposed to a plain
+   game/status message meant for the Log tab. */
+static int bottom_log_is_protocol(const char *ln){
+    if(!strncmp(ln,"[RECV",5)) return 1;
+    if(!strncmp(ln,"[SEND",5)) return 1;
+    if(!strncmp(ln,"[ENGINE",7)) return 1;
+    if(!strncmp(ln,"[CRASH",6)) return 1;
+    if(!strncmp(ln,"[PART",5)) return 1;
+    return 0;
+}
+
 /* ---- AI constants ---- */
 #define TT_SIZE (1 << 20)
 #define INF     30000
@@ -3083,103 +3095,55 @@ static void draw_bottom_log(void){
         int active=(t==bottom_log_tab);
         frect(tx,ty,tab_w,tab_h, active?28:10, active?20:10, active?0:10);
         if(active) orect(tx,ty,tab_w,tab_h,255,165,0); else orect(tx,ty,tab_w,tab_h,60,60,60);
-        const char *lab = t==0?"ENGINES":"LOG";
+        const char *lab = t==0?"OUTPUT":"LOG";
         dtxt(tx+10, ty+4, lab,1, active?255:150, active?165:150, active?0:150);
     }
-    dtxt(rw-210, y0+4, "PV = principal variation",1, 90,90,90);
+    dtxt(rw-210, y0+4, "Output = raw UCI traffic",1, 90,90,90);
     if(bottom_log_tab==1){
-        // LOG tab — show as many recent lines as fit in the box (was a fixed
-        // 5 lines regardless of the panel's actual height — the request:
-        // "the log under the board doesn't work").
+        // LOG tab — game/status messages only (raw UCI goes to the Output tab;
+        // moves are shown in the MOVES panel, not here).
         int ly=y0+22;
         int box_h=LOG_H-26;
         frect(8,ly,rw-16,box_h,0,0,0);
         orect(8,ly,rw-16,box_h,55,55,55);
         int line_h=12;
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
-        int show_n = bottom_log_n<max_lines ? bottom_log_n : max_lines;
-        for(int i=0;i<show_n;i++){
-            int idx = bottom_log_n-show_n+i;
-            if(idx<0) continue;
-            char *ln = bottom_log_lines[idx];
-            if(!ln[0]) continue;
-            dtxt(12, ly+4+i*line_h, ln,1, 180,180,180);
+        int cnt=0; for(int i=0;i<bottom_log_n;i++) if(!bottom_log_is_protocol(bottom_log_lines[i])) cnt++;
+        int show_n = cnt<max_lines ? cnt : max_lines;
+        int drawn=0;
+        for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
+            char *ln = bottom_log_lines[i];
+            if(!ln[0] || bottom_log_is_protocol(ln)) continue;
+            dtxt(12, ly+4+(show_n-1-drawn)*line_h, ln,1, 180,180,180);
+            drawn++;
         }
-        if(bottom_log_n==0) dtxt(12, ly+4, "(log empty — engine and game messages will appear here)",1, 110,110,110);
+        if(cnt==0) dtxt(12, ly+4, "(log empty — engine and game messages will appear here)",1, 110,110,110);
         return;
     }
-    int col_w = (rw - 16)/2;
-    for(int ei=0; ei<2; ei++){
-        int x = 8 + ei*(col_w+8);
-        int y = y0+22;
-        // panel bg
-        frect(x,y,col_w, LOG_H-26, 0,0,0);
-        orect(x,y,col_w, LOG_H-26, 55,55,55);
-        // header with name
-        char hdr[96];
-        const char *n = eng_analysis[ei].name[0] ? eng_analysis[ei].name : (uci_eng[ei].name[0]?uci_eng[ei].name:(ei==0?"Engine 1":"Engine 2"));
-        if(!n[0]) n = ei==0?"Engine 1":"Engine 2";
-        // strip path if needed
-        char nb[96]; strncpy(nb,n,95); nb[95]=0;
-        if(strchr(nb,'\\')||strchr(nb,'/')){
-            char *p=strrchr(nb,'\\'); if(!p) p=strrchr(nb,'/');
-            if(p) memmove(nb,p+1,strlen(p));
+    /* v13: "Output" tab — raw UCI protocol traffic (like Arena's Output
+       window), replacing the old two-column Engine summary that duplicated the
+       side engine panels. Shows RECV/SEND/ENGINE lines for both engines. */
+    {
+        int ly=y0+22;
+        int box_h=LOG_H-26;
+        frect(8,ly,rw-16,box_h,0,0,0);
+        orect(8,ly,rw-16,box_h,55,55,55);
+        int line_h=12;
+        int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
+        int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_is_protocol(bottom_log_lines[i])) cnt++;
+        int show_n = cnt<max_lines ? cnt : max_lines;
+        int drawn=0;
+        for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
+            char *ln = bottom_log_lines[i];
+            if(!ln[0] || !bottom_log_is_protocol(ln)) continue;
+            int colR=180,colG=180,colB=180;
+            if(strstr(ln,"[SEND")){ colR=150;colG=200;colB=255; }
+            else if(strstr(ln,"[RECV")){ colR=255;colG=210;colB=150; }
+            else if(strstr(ln,"[ENGINE")){ colR=255;colG=160;colB=120; }
+            dtxt(12, ly+4+(show_n-1-drawn)*line_h, ln,1, colR,colG,colB);
+            drawn++;
         }
-        /* v13: figure out whether THIS engine slot (ei) is the one "on move"
-           right now — i.e. whose turn it currently is — using the same
-           mapping the engine uses to actually pick a mover (tournament /
-           AI-vs-AI W/B assignment, or the single selected UCI engine
-           otherwise). The dot blinks for that engine, not only once it has
-           actually started crunching numbers. */
-        int on_move_ei = -1;
-        if(tourney_active||aivsai){
-            int tp = (turn==WHITE)?tourney_player[0]:tourney_player[1];
-            if(tp==1) on_move_ei=0; else if(tp==2) on_move_ei=1;
-        } else if(use_uci_engine && turn!=player_color){
-            on_move_ei = active_engine;
-        }
-        /* FIX: the engine that is actually "on move" (on_move_ei) is the only
-           one that should blink. The old third clause used the stale global
-           active_engine (which never follows the turn in aivsai/tourney), so
-           engine 1 kept blinking even when engine 2 was on move. */
-        int is_th = (ei==on_move_ei) || eng_analysis[ei].is_thinking;
-        snprintf(hdr,sizeof(hdr),"%s%s", nb, is_th?" *":"");
-        // header — slightly larger: use scale 1 but bold (draw twice)
-        dtxt(x+4, y+4, hdr,1, is_th?255:200, is_th?165:200, is_th?0:200);
-        // depth / eval / nps
-        int d = eng_analysis[ei].has_data?eng_analysis[ei].depth:g_best_depth;
-        int evraw = eng_analysis[ei].has_data?eng_analysis[ei].eval:g_best_eval;
-        char evs[16]; if(evraw>9000) strcpy(evs,"M+"); else if(evraw<-9000) strcpy(evs,"M-"); else snprintf(evs,sizeof(evs),"%+.2f",evraw/100.0);
-        char st[96];
-        long long nps = eng_analysis[ei].has_data?eng_analysis[ei].nps:g_nps;
-        char nps_s[24]; if(nps>=1000000) snprintf(nps_s,sizeof(nps_s),"%.1fM",nps/1e6); else if(nps>=1000) snprintf(nps_s,sizeof(nps_s),"%.0fK",nps/1e3); else snprintf(nps_s,sizeof(nps_s),"%lld",nps);
-        snprintf(st,sizeof(st),"D%d %s NPS:%s", d, evs, nps_s);
-        dtxt(x+4, y+18, st,1, 180,180,180);
-        // PV — larger CMD: draw bold by double offset
-        const char *pv = eng_analysis[ei].has_data?eng_analysis[ei].pv:g_pv_str;
-        if(!pv[0]) pv = "(no PV)";
-        int maxch = (col_w-12)/9; if(maxch<10) maxch=10;
-        char pv1[200]; strncpy(pv1,pv, maxch); pv1[maxch]=0;
-        // bold effect: dark shadow then white
-        dtxt(x+5, y+32+1, pv1,1, 40,40,40);
-        dtxt(x+4, y+32, pv1,1, 220,220,220);
-        if((int)strlen(pv) > maxch){
-            char pv2[200]; strncpy(pv2, pv+maxch, maxch); pv2[maxch]=0;
-            dtxt(x+5, y+44+1, pv2,1, 30,30,30);
-            dtxt(x+4, y+44, pv2,1, 160,160,160);
-        }
-        // status dot — engine 1 = blue, engine 2 = green (orange reserved
-        // for the other blinking indicators, so we avoid it here)
-        int dotR,dotG,dotB, dotRd,dotGd,dotBd;
-        if(ei==0){ dotR=70; dotG=150; dotB=255; dotRd=28; dotGd=55; dotBd=95; }
-        else     { dotR=40; dotG=200; dotB=120; dotRd=24; dotGd=72; dotBd=48; }
-        if(is_th){
-            int blink=(SDL_GetTicks()/350)%2;
-            if(blink) fcircle(x+col_w-10, y+8, 4, dotR,dotG,dotB);
-            else fcircle(x+col_w-10, y+8, 4, dotRd,dotGd,dotBd);
-        } else {
-            fcircle(x+col_w-10, y+8, 3, 60,60,60);
-        }
+        if(cnt==0) dtxt(12, ly+4, "(no UCI output yet — load an engine and make a move)",1, 110,110,110);
     }
 }
 
@@ -4035,7 +3999,9 @@ static void uci_dbg_open(void){
 static void uci_dbg_log(const char *dir, int ei, const char *line){
     if(!uci_dbg) uci_dbg_open();
     if(uci_dbg){ fprintf(uci_dbg, "[%s e%d] %s\n", dir, ei, line); fflush(uci_dbg); }
-    // also mirror to bottom log tab (truncated, skip huge position lines)
+    // mirror to bottom log tab, EXCEPT plain moves (those live in the MOVES
+    // panel, not the log) and skipped huge position lines
+    if(strcmp(dir,"MOVE")==0) return;
     if(line && strlen(line)<120){
         char tmp[140]; snprintf(tmp,sizeof(tmp),"[%s %d] %s", dir, ei, line);
         bottom_log_push(tmp);
@@ -5362,7 +5328,7 @@ int main(void){
                         int tab_w=80;
                         for(int t=0;t<2;t++){
                             int tx=8+t*(tab_w+6);
-                            if(mx>=tx && mx<tx+tab_w){ bottom_log_tab=t; char tmsg[48]; snprintf(tmsg,sizeof(tmsg),"TAB -> %s", t==0?"ENGINES":"LOG"); bottom_log_push(tmsg); goto skip; }
+                            if(mx>=tx && mx<tx+tab_w){ bottom_log_tab=t; char tmsg[48]; snprintf(tmsg,sizeof(tmsg),"TAB -> %s", t==0?"OUTPUT":"LOG"); bottom_log_push(tmsg); goto skip; }
                         }
                     }
                 }
