@@ -2068,7 +2068,7 @@ static void draw_menus(int mx,int my){
                 int iy2=iy+4+ii*ih;
                 /* separator rows (header rows starting with ---) */
                 int is_sep = 0;
-                if(mi==1 && (ii==3||ii==11||ii==19||ii==22)) is_sep=1;
+                if(mi==1 && (ii==3||ii==12||ii==20||ii==23)) is_sep=1;
                 if(mi==2 && (ii==0||ii==2||ii==6)) is_sep=1;
                 if(mi==3 && (ii==0||ii==5||ii==10||ii==15)) is_sep=1;
                 if(is_sep){
