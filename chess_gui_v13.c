@@ -115,20 +115,21 @@ static char bottom_log_lines[BOTTOM_LOG_MAX][128]; static int bottom_log_n=0;
 static void bottom_log_push(const char *s){ if(bottom_log_n<BOTTOM_LOG_MAX){ strncpy(bottom_log_lines[bottom_log_n],s,127); bottom_log_lines[bottom_log_n][127]=0; bottom_log_n++; } else { for(int i=1;i<BOTTOM_LOG_MAX;i++) strcpy(bottom_log_lines[i-1],bottom_log_lines[i]); strncpy(bottom_log_lines[BOTTOM_LOG_MAX-1],s,127); } }
 
 /* which engine slot a log line belongs to: 0 = Engine 1 (E1), 1 = Engine 2
-   (E2), -1 = neither (game/status messages). The on-screen buffer is written as
-   "[DIR NUM] rest..." (see uci_dbg_log), so we parse the integer right before
-   the closing ']': 0 -> E1, 1 -> E2, anything else -> Log. Used to split the
-   bottom log into per-engine Out1 / Out2 tabs. */
+   (E2), -1 = neither (game/status messages). Only true UCI-protocol lines
+   (RECV/SEND/ENGINE/PART/CRASH/PONDER*) carry a per-engine slot and belong in
+   Out1/Out2; everything else (GAME/CLOCK/WARN/TAB/LOG/...) is a status line for
+   the Log tab. Matching on the bracket keyword (not just the number) avoids
+   misrouting lines like "[TAB -> Out1]" into an engine tab. */
 static int bottom_log_engine(const char *ln){
-    if(ln[0] != '[') return -1;
-    const char *br = strchr(ln, ']');
-    if(!br || br==ln+1) return -1;
-    const char *sp = NULL;
-    for(const char *p=ln+1; p<br; p++) if(*p==' ') sp=p;
-    if(!sp) return -1;
-    int e = atoi(sp+1);
-    if(e==0) return 0;
-    if(e==1) return 1;
+    const char *dirs[] = {"[RECV ","[SEND ","[ENGINE ","[PART ","[CRASH ",
+                          "[PONDER ","[PONDER-HIT ","[PONDER-BEST "};
+    for(int k=0;k<8;k++){
+        int L=(int)strlen(dirs[k]);
+        if(!strncmp(ln,dirs[k],L)){
+            int e = atoi(ln+L);
+            return e==1?1:0;
+        }
+    }
     return -1;
 }
 
@@ -2953,10 +2954,21 @@ static void draw_sidebar(void){
             }
             char hdr[120];
             const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
-            snprintf(hdr,sizeof(hdr),"%s%s%s", side_lbl, ename, is_active_thinking?" *THINKING*":"");
+            snprintf(hdr,sizeof(hdr),"%s%s", side_lbl, ename);
             int maxch=(panel_w-16)/9; if((int)strlen(hdr)>maxch){ hdr[maxch-3]=0; strcat(hdr,"..."); }
             dtxt(FRAME_W+9, sy+5, hdr, 1, 0,0,0);
             dtxt(FRAME_W+8, sy+4, hdr, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
+            /* thinking indicator — colored dot (blinking orange while searching)
+               instead of the old *THINKING* text */
+            {
+                int dx=FRAME_W+4+panel_w-12, dy=sy+10;
+                if(is_active_thinking){
+                    int blink=(SDL_GetTicks()/350)%2;
+                    fcircle(dx,dy,4, blink?255:200, blink?165:110, 0);
+                } else {
+                    fcircle(dx,dy,3, 70,70,70);
+                }
+            }
             /* Stats line */
             int disp_depth = eng_analysis[ei].has_data ? eng_analysis[ei].depth : g_best_depth;
             int disp_eval_raw = eng_analysis[ei].has_data ? eng_analysis[ei].eval : g_best_eval;
