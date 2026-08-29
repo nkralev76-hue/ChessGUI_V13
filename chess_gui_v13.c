@@ -2407,59 +2407,44 @@ static int material_diff(void){
     for(int t=1;t<=5;t++) d += cap_w[t]*PIECE_VAL[t] - cap_b[t]*PIECE_VAL[t];
     return d;
 }
-static void draw_captured(int x,int y,int white_side){
-    /* white_side=1: show what White has captured, i.e. black pieces (cap_w[]);
-       white_side=0: show what Black has captured, i.e. white pieces (cap_b[]) */
+/* v13: render a side's captured pieces inside a box (x,y,w,h). The piece icons
+   are scaled to the box and wrap onto a new row when they reach the right edge,
+   so the layout is always proportional to the panel and never spills out. */
+static void draw_captured_box(int x,int y,int w,int h,int white_side,const char*label){
+    dtxt(x,y,label,1,170,170,170);
     int *cap = white_side ? cap_w : cap_b;
     int texcol = white_side ? 0 : 1; /* colour of the captured pieces themselves */
-    int icon=16, cx=x;
+    int gx=x, gy=y+14, gh=h-14;
+    int total=0; for(int t=1;t<=5;t++) total+=cap[t];
+    if(total==0){ dtxt(x, gy+ (gh>20?6:0), "(none)",1,90,90,90); return; }
+    /* pick an icon size that fits the box both horizontally (wrap) and vertically */
+    int cs=26;
+    int cols = w/cs; if(cols<1)cols=1;
+    int rows = (total+cols-1)/cols;
+    while(rows*cs > gh && cs>10){ cs-=2; cols = w/cs; if(cols<1)cols=1; rows=(total+cols-1)/cols; }
+    int grid_w=cols*cs;
+    int sx=gx+(w-grid_w)/2, sy=gy+(gh-rows*cs)/2;
+    int idx=0;
     for(int t=5;t>=1;t--){
         for(int n=0;n<cap[t];n++){
-            /* v12.2: light backing chip so black-piece icons don't vanish
-               against the dark sidebar background */
-            frect(cx-1,y-1,icon+2,icon+2,150,150,160);
+            int col=idx%cols, row=idx/cols;
+            int px=sx+col*cs, py=sy+row*cs, icon=cs-3;
+            /* v12.2: light backing chip so black-piece icons don't vanish */
+            frect(px-1,py-1,icon+2,icon+2,150,150,160);
             if(tex[texcol][t]){
-                SDL_Rect d={cx,y,icon,icon};
+                SDL_Rect d={px,py,icon,icon};
                 SDL_RenderCopy(ren,tex[texcol][t],NULL,&d);
             } else {
-                fcircle(cx+icon/2,y+icon/2,icon/2-1, texcol?230:60,texcol?230:60,texcol?210:55);
+                fcircle(px+icon/2,py+icon/2,icon/2-1, texcol?230:60,texcol?230:60,texcol?210:55);
             }
-            cx+=icon-3;
+            idx++;
         }
     }
     int md=material_diff();
-    if(white_side && md>0){char b[8];sprintf(b,"+%d",md);dtxt(cx+8,y+2,b,1,225,185,90);}
-    if(!white_side && md<0){char b[8];sprintf(b,"+%d",-md);dtxt(cx+8,y+2,b,1,225,185,90);}
-}
-
-/* v13: compact material-balance meter drawn in the (otherwise empty) middle of
-   the captured-pieces panel. Fully bounded inside the panel — never spills out. */
-static void draw_material_meter(int x,int cy,int w){
-    int wc[6]={0}, bc[6]={0}; /* 0=PAWN .. 4=QUEEN */
-    for(int r=0;r<8;r++) for(int c=0;c<8;c++){
-        int p=bb_piece_at_rc(&B,r,c);
-        if(p>0) wc[abs(p)-1]++; else if(p<0) bc[abs(p)-1]++;
+    if((white_side&&md>0)||(!white_side&&md<0)){
+        char b[8]; snprintf(b,sizeof b,"+%d", white_side?md:-md);
+        dtxt(x+w-(int)strlen(b)*9, y, b,1,225,185,90);
     }
-    int wm=wc[0]+wc[1]*3+wc[2]*3+wc[3]*5+wc[4]*9;
-    int bm=bc[0]+bc[1]*3+bc[2]*3+bc[3]*5+bc[4]*9;
-    double diff=wm-bm; /* pawns, White perspective */
-    int bw=w-16, bx=x+8, bh=14, by=cy-bh/2;
-    dtxt(x, by-13, "MATERIAL",1,255,165,0);
-    frect(bx,by,bw,bh,22,22,22); orect(bx,by,bw,bh,70,70,70);
-    int center=bx+bw/2;
-    int total=2000; /* 20 pawns full scale */
-    if(diff>0){
-        int pw=(int)(bw/2*(diff*100.0/total)); if(pw>bw/2)pw=bw/2;
-        frect(center,by,pw,bh,80,140,235);
-    } else {
-        int pw=(int)(bw/2*(-diff*100.0/total)); if(pw>bw/2)pw=bw/2;
-        frect(center-pw,by,pw,bh,235,150,60);
-    }
-    char s[24];
-    snprintf(s,sizeof s,"W %s%.1f", diff>=0?"+":"", diff);
-    dtxt(bx, by+bh+4, s,1, 180,200,255);
-    snprintf(s,sizeof s,"B %s%.1f", diff<=0?"+":"", -diff);
-    dtxt(bx+bw-(int)strlen(s)*9, by+bh+4, s,1, 255,200,120);
 }
 /* v12: small eval-history sparkline, drawn next to the material eval bar */
 static void draw_eval_sparkline(int x,int y,int w,int h){
@@ -2752,26 +2737,15 @@ static void draw_sidebar(void){
         /* v13: keep the two capture rows near the top and use the (often large)
            remaining space for live position statistics, so the panel is never
            just empty when few pieces have been captured. */
-        /* v13: spread the two capture rows evenly across the panel's full height
-           instead of two fixed offsets — the panel is now much taller than the
-           original 96px (it fills the sidebar like every other panel), so the
-           fixed offsets used to leave most of the box empty. */
+        /* v13: each side's captured pieces are laid out in a box that is scaled
+           to the panel — pieces wrap to a new row at the right edge and are sized
+           proportionally, so the panel is filled without spilling anywhere. */
         {
-            int header_h=20;
-            int rows_h = cap_h-header_h-6; if(rows_h<40) rows_h=40;
-            int row_h = rows_h/2;
-            int row1_y = sy+header_h;
-            int row2_y = sy+header_h+row_h;
-            dtxt(FRAME_W+8, row1_y, "W taken:",1, 170,170,170);
-            draw_captured(FRAME_W+8, row1_y+14, 1);
-            dtxt(FRAME_W+8, row2_y, "B taken:",1, 170,170,170);
-            draw_captured(FRAME_W+8, row2_y+14, 0);
-            /* v13: fill the empty middle of the panel with a bounded material
-               meter (only when the panel is tall enough to host it) */
-            if(rows_h > 90){
-                int mid_y = row1_y + (row2_y - row1_y)/2;
-                draw_material_meter(FRAME_W+8, mid_y, sw-16);
-            }
+            int head=18;
+            int boxh = (cap_h-head)/2;
+            if(boxh<26) boxh=26;
+            draw_captured_box(FRAME_W+8, sy+head,        sw-16, boxh, 1, "W taken:");
+            draw_captured_box(FRAME_W+8, sy+head+boxh,  sw-16, boxh, 0, "B taken:");
         }
     sy+=cap_h+6;
 
