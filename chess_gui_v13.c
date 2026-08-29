@@ -114,19 +114,6 @@ static int bottom_log_tab = 0; /* 0=Engines, 1=Log */
 static char bottom_log_lines[BOTTOM_LOG_MAX][128]; static int bottom_log_n=0;
 static void bottom_log_push(const char *s){ if(bottom_log_n<BOTTOM_LOG_MAX){ strncpy(bottom_log_lines[bottom_log_n],s,127); bottom_log_lines[bottom_log_n][127]=0; bottom_log_n++; } else { for(int i=1;i<BOTTOM_LOG_MAX;i++) strcpy(bottom_log_lines[i-1],bottom_log_lines[i]); strncpy(bottom_log_lines[BOTTOM_LOG_MAX-1],s,127); } }
 
-/* v13: copy the whole on-screen log to the system clipboard (key C) so it can
-   be pasted into a forum post / bug report. Works regardless of active tab. */
-static void copy_log_to_clipboard(void){
-    if(bottom_log_n==0){ bottom_log_push("LOG: nothing to copy"); return; }
-    size_t cap=(size_t)bottom_log_n*130+16; char *buf=malloc(cap);
-    if(!buf){ bottom_log_push("LOG: copy failed (out of memory)"); return; }
-    buf[0]=0;
-    for(int i=0;i<bottom_log_n;i++){ strncat(buf,bottom_log_lines[i],cap-1); strncat(buf,"\n",2); }
-    if(SDL_SetClipboardText(buf)==0) bottom_log_push("LOG: copied to clipboard");
-    else bottom_log_push("LOG: clipboard copy failed");
-    free(buf);
-}
-
 /* v13: a log line is "raw UCI protocol" (shown in the Output tab) when it is a
    RECV/SEND/ENGINE/CRASH/PART engine-traffic line — as opposed to a plain
    game/status message meant for the Log tab. */
@@ -137,6 +124,31 @@ static int bottom_log_is_protocol(const char *ln){
     if(!strncmp(ln,"[CRASH",6)) return 1;
     if(!strncmp(ln,"[PART",5)) return 1;
     return 0;
+}
+
+/* v13: copy the VISIBLE bottom tab to the system clipboard (key C) — the Log
+   tab copies the game/status messages, the Output tab copies the raw UCI
+   traffic. So "C" copies what you are actually looking at, not the whole mix. */
+static void copy_log_to_clipboard(void){
+    int want_proto = (bottom_log_tab==0); /* Output tab = protocol, Log tab = messages */
+    int cnt=0;
+    for(int i=0;i<bottom_log_n;i++){
+        int proto = bottom_log_is_protocol(bottom_log_lines[i]);
+        if(want_proto ? proto : !proto) cnt++;
+    }
+    if(cnt==0){ bottom_log_push("LOG: nothing to copy"); return; }
+    size_t cap=(size_t)cnt*130+16; char *buf=malloc(cap);
+    if(!buf){ bottom_log_push("LOG: copy failed (out of memory)"); return; }
+    buf[0]=0;
+    for(int i=0;i<bottom_log_n;i++){
+        int proto = bottom_log_is_protocol(bottom_log_lines[i]);
+        if(want_proto ? proto : !proto){
+            strncat(buf,bottom_log_lines[i],cap-1); strncat(buf,"\n",2);
+        }
+    }
+    if(SDL_SetClipboardText(buf)==0) bottom_log_push("LOG: copied to clipboard");
+    else bottom_log_push("LOG: clipboard copy failed");
+    free(buf);
 }
 
 /* ---- AI constants ---- */
@@ -2043,7 +2055,7 @@ static const char*HITEMS[]={
     "Game      New / Load / Save",
     "Settings  Theme, Time, Ponder",
     "Engine    Add / manage UCI",
-    "C         Copy log to clipboard"
+    "C         Copy log / output"
 };
 #define N_HELP 17
 static const char*OITEMS[]={
@@ -3140,7 +3152,13 @@ static void draw_bottom_log(void){
             if(strstr(ln,"[SEND")){ colR=150;colG=200;colB=255; }
             else if(strstr(ln,"[RECV")){ colR=255;colG=210;colB=150; }
             else if(strstr(ln,"[ENGINE")){ colR=255;colG=160;colB=120; }
-            dtxt(12, ly+4+(show_n-1-drawn)*line_h, ln,1, colR,colG,colB);
+            /* label the engine as E1/E2 (matches the side panels) instead of the
+               raw [DIR eN] tag, then print the rest of the protocol line. */
+            int ei_out = strstr(ln,"e1]")?1:0;
+            const char *rest = strchr(ln,']'); rest = rest? rest+1 : ln; if(*rest==' ') rest++;
+            int rowy = ly+4+(show_n-1-drawn)*line_h;
+            if(ei_out){ dtxt(12, rowy, "E2:",1, 40,200,120); dtxt(12+27, rowy, rest,1, colR,colG,colB); }
+            else      { dtxt(12, rowy, "E1:",1, 70,150,255); dtxt(12+27, rowy, rest,1, colR,colG,colB); }
             drawn++;
         }
         if(cnt==0) dtxt(12, ly+4, "(no UCI output yet — load an engine and make a move)",1, 110,110,110);
