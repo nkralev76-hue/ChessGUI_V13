@@ -1967,7 +1967,7 @@ static const char*SITEMS[]={
     "Opening book on/off",
     "--- Themes (CMD) ---",
     "CMD Gray","CMD High Contrast","CMD Amber",
-    "CMD Red Tint","Classic Green","Classic Brown","Classic Gray","CMD Blue",
+    "CMD Red Tint","CMD Blue","Classic Green","Classic Brown","Classic Gray",
     "--- Time ---",
     "1 min","3 min","5 min","10 min","30 min",
     "60 min","120 min",
@@ -2062,7 +2062,7 @@ static void draw_menus(int mx,int my){
                 if(mi==1){
                     if(ii==0&&sound_on)mk=1; if(ii==1&&flip_board)mk=1; if(ii==2&&use_book)mk=1;
                     if(ii==4&&cur_theme==0)mk=1; if(ii==5&&cur_theme==1)mk=1; if(ii==6&&cur_theme==2)mk=1; if(ii==7&&cur_theme==3)mk=1;
-                    if(ii==8&&cur_theme==4)mk=1; if(ii==9&&cur_theme==5)mk=1; if(ii==10&&cur_theme==6)mk=1; if(ii==11&&cur_theme==7)mk=1;
+                    if(ii==8&&cur_theme==7)mk=1; if(ii==9&&cur_theme==4)mk=1; if(ii==10&&cur_theme==5)mk=1; if(ii==11&&cur_theme==6)mk=1;
                     if(ii==12&&base_time==1*60*1000&&increment==0)mk=1;
                     if(ii==13&&base_time==3*60*1000&&increment==0)mk=1;
                     if(ii==14&&base_time==5*60*1000&&increment==0)mk=1;
@@ -2097,7 +2097,16 @@ static void draw_menus(int mx,int my){
                     if(ii==16&&tourney_active)mk=1;
                 }
                 if(mk)dtxt(ix+4,iy2+8,"*",1,100,220,100);
-                dtxt(ix+20,iy2+8,menu_item(mi,ii),1,hovi?255:200,hovi?255:200,hovi?255:230);
+                int txtx = ix+20;
+                /* v13: show a color swatch for theme entries so each theme is
+                   displayed with its own color, grouped like the others */
+                if(mi==1 && ii>=4 && ii<=11){
+                    int tidx = (ii==4)?0:(ii==5)?1:(ii==6)?2:(ii==7)?3:(ii==8)?7:(ii==9)?4:(ii==10)?5:6;
+                    frect(ix+16, iy2+7, 12,12, THEMES[tidx].lr, THEMES[tidx].lg, THEMES[tidx].lb);
+                    orect(ix+16, iy2+7, 12,12, 120,120,120);
+                    txtx = ix+32;
+                }
+                dtxt(txtx,iy2+8,menu_item(mi,ii),1,hovi?255:200,hovi?255:200,hovi?255:230);
             }
         }
     }
@@ -2225,10 +2234,10 @@ static void handle_menu(int mx,int my){
                     else if(ii==5){cur_theme=1;}
                     else if(ii==6){cur_theme=2;}
                     else if(ii==7){cur_theme=3;}
-                    else if(ii==8){cur_theme=4;}
-                    else if(ii==9){cur_theme=5;}
-                    else if(ii==10){cur_theme=6;}
-                    else if(ii==11){cur_theme=7;}
+                    else if(ii==8){cur_theme=7;}
+                    else if(ii==9){cur_theme=4;}
+                    else if(ii==10){cur_theme=5;}
+                    else if(ii==11){cur_theme=6;}
                     else if(ii==12){base_time=1*60*1000;increment=0;}
                     else if(ii==13){base_time=3*60*1000;increment=0;}
                     else if(ii==14){base_time=5*60*1000;increment=0;}
@@ -3003,7 +3012,7 @@ static void draw_sidebar(void){
         if(!use_ponder){
             snprintf(pbuf,sizeof(pbuf),"PONDER OFF");
             dtxt(bx+8, by+7, pbuf, 1, 200,200,200);
-            dtxt(bx+90, by+7, "(Settings)", 1, 110,110,110);
+            dtxt(bx+8 + (int)strlen(pbuf)*9 + 8, by+7, "(Settings)", 1, 110,110,110);
         } else if(ponder_any){
             int blink = (SDL_GetTicks()/350)%2;
             snprintf(pbuf,sizeof(pbuf),"PONDER ON %s d%d", blink?"[*]":"[ ]", g_best_depth);
@@ -3168,6 +3177,7 @@ static void render(int mx,int my){
         }
     }
     if(cur_theme<=4) orect(BOARD_OX-2,BOARD_OY-2,BRD+4,BRD+4, 255,165,0); /* orange accent for CMD */
+    else if(cur_theme==7) orect(BOARD_OX-2,BOARD_OY-2,BRD+4,BRD+4, 90,140,220); /* blue accent for CMD Blue */
     else orect(BOARD_OX-2,BOARD_OY-2,BRD+4,BRD+4, 90,90,90);
     orect(BOARD_OX-1,BOARD_OY-1,BRD+2,BRD+2, 44,44,44);
 
