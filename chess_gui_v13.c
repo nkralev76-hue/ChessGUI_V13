@@ -114,35 +114,32 @@ static int bottom_log_tab = 0; /* 0=Engines, 1=Log */
 static char bottom_log_lines[BOTTOM_LOG_MAX][128]; static int bottom_log_n=0;
 static void bottom_log_push(const char *s){ if(bottom_log_n<BOTTOM_LOG_MAX){ strncpy(bottom_log_lines[bottom_log_n],s,127); bottom_log_lines[bottom_log_n][127]=0; bottom_log_n++; } else { for(int i=1;i<BOTTOM_LOG_MAX;i++) strcpy(bottom_log_lines[i-1],bottom_log_lines[i]); strncpy(bottom_log_lines[BOTTOM_LOG_MAX-1],s,127); } }
 
-/* v13: a log line is "raw UCI protocol" (shown in the Output tab) when it is a
-   RECV/SEND/ENGINE/CRASH/PART engine-traffic line — as opposed to a plain
-   game/status message meant for the Log tab. */
-static int bottom_log_is_protocol(const char *ln){
-    if(!strncmp(ln,"[RECV",5)) return 1;
-    if(!strncmp(ln,"[SEND",5)) return 1;
-    if(!strncmp(ln,"[ENGINE",7)) return 1;
-    if(!strncmp(ln,"[CRASH",6)) return 1;
-    if(!strncmp(ln,"[PART",5)) return 1;
-    return 0;
+/* which engine slot a log line belongs to: 0 = Engine 1 (E1), 1 = Engine 2
+   (E2), -1 = neither (game/status messages). Used to split the bottom log into
+   per-engine Out1 / Out2 tabs. */
+static int bottom_log_engine(const char *ln){
+    if(strstr(ln,"e0]")||strstr(ln,"[ENGINE 0]")||strstr(ln,"[PONDER 0]")||
+       strstr(ln,"[PONDER-HIT 0]")||strstr(ln,"[PONDER-BEST 0]")) return 0;
+    if(strstr(ln,"e1]")||strstr(ln,"[ENGINE 1]")||strstr(ln,"[PONDER 1]")||
+       strstr(ln,"[PONDER-HIT 1]")||strstr(ln,"[PONDER-BEST 1]")) return 1;
+    return -1;
 }
 
-/* v13: copy the VISIBLE bottom tab to the system clipboard (key C) — the Log
-   tab copies the game/status messages, the Output tab copies the raw UCI
-   traffic. So "C" copies what you are actually looking at, not the whole mix. */
+/* v13: copy the VISIBLE bottom tab to the system clipboard (key C) — Out1
+   copies Engine 1's UCI traffic, Out2 copies Engine 2's, Log copies the
+   game/status messages. So "C" copies what you are actually looking at. */
 static void copy_log_to_clipboard(void){
-    int want_proto = (bottom_log_tab==0); /* Output tab = protocol, Log tab = messages */
+    int want_ei = (bottom_log_tab==0)?0 : (bottom_log_tab==1)?1 : -1;
     int cnt=0;
     for(int i=0;i<bottom_log_n;i++){
-        int proto = bottom_log_is_protocol(bottom_log_lines[i]);
-        if(want_proto ? proto : !proto) cnt++;
+        if(bottom_log_engine(bottom_log_lines[i])==want_ei) cnt++;
     }
     if(cnt==0){ bottom_log_push("LOG: nothing to copy"); return; }
     size_t cap=(size_t)cnt*130+16; char *buf=malloc(cap);
     if(!buf){ bottom_log_push("LOG: copy failed (out of memory)"); return; }
     buf[0]=0;
     for(int i=0;i<bottom_log_n;i++){
-        int proto = bottom_log_is_protocol(bottom_log_lines[i]);
-        if(want_proto ? proto : !proto){
+        if(bottom_log_engine(bottom_log_lines[i])==want_ei){
             strncat(buf,bottom_log_lines[i],cap-1); strncat(buf,"\n",2);
         }
     }
@@ -2055,7 +2052,7 @@ static const char*HITEMS[]={
     "Game      New / Load / Save",
     "Settings  Theme, Time, Ponder",
     "Engine    Add / manage UCI",
-    "C         Copy log / output"
+    "C         Copy visible tab"
 };
 #define N_HELP 17
 static const char*OITEMS[]={
@@ -3100,19 +3097,19 @@ static void draw_bottom_log(void){
     frect(0,y0,rw,LOG_H, 10,10,10);
     SDL_SetRenderDrawColor(ren,70,70,70,255);
     SDL_RenderDrawLine(ren,0,y0,rw,y0);
-    // tabs
-    int tab_w=80, tab_h=18;
-    for(int t=0;t<2;t++){
+    // tabs — Out1 / Out2 = per-engine raw UCI, Log = game/status messages
+    int tab_w=70, tab_h=18;
+    for(int t=0;t<3;t++){
         int tx=8+t*(tab_w+6), ty=y0;
         int active=(t==bottom_log_tab);
         frect(tx,ty,tab_w,tab_h, active?28:10, active?20:10, active?0:10);
         if(active) orect(tx,ty,tab_w,tab_h,255,165,0); else orect(tx,ty,tab_w,tab_h,60,60,60);
-        const char *lab = t==0?"OUTPUT":"LOG";
-        dtxt(tx+10, ty+4, lab,1, active?255:150, active?165:150, active?0:150);
+        const char *lab = t==0?"Out1": t==1?"Out2": "Log";
+        dtxt(tx+12, ty+4, lab,1, active?255:150, active?165:150, active?0:150);
     }
-    dtxt(rw-210, y0+4, "Output = raw UCI traffic",1, 90,90,90);
-    if(bottom_log_tab==1){
-        // LOG tab — game/status messages only (raw UCI goes to the Output tab;
+    dtxt(rw-170, y0+4, "per-engine UCI output",1, 90,90,90);
+    if(bottom_log_tab==2){
+        // LOG tab — game/status messages only (engine traffic lives in Out1/Out2;
         // moves are shown in the MOVES panel, not here).
         int ly=y0+22;
         int box_h=LOG_H-26;
@@ -3120,48 +3117,43 @@ static void draw_bottom_log(void){
         orect(8,ly,rw-16,box_h,55,55,55);
         int line_h=12;
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
-        int cnt=0; for(int i=0;i<bottom_log_n;i++) if(!bottom_log_is_protocol(bottom_log_lines[i])) cnt++;
+        int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_engine(bottom_log_lines[i])==-1) cnt++;
         int show_n = cnt<max_lines ? cnt : max_lines;
         int drawn=0;
         for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
             char *ln = bottom_log_lines[i];
-            if(!ln[0] || bottom_log_is_protocol(ln)) continue;
+            if(!ln[0] || bottom_log_engine(ln)!=-1) continue;
             dtxt(12, ly+4+(show_n-1-drawn)*line_h, ln,1, 180,180,180);
             drawn++;
         }
         if(cnt==0) dtxt(12, ly+4, "(log empty — engine and game messages will appear here)",1, 110,110,110);
         return;
     }
-    /* v13: "Output" tab — raw UCI protocol traffic (like Arena's Output
-       window), replacing the old two-column Engine summary that duplicated the
-       side engine panels. Shows RECV/SEND/ENGINE lines for both engines. */
+    /* v13: Out1 / Out2 tabs — raw UCI protocol for Engine 1 / Engine 2, like
+       Arena's per-engine Output windows. Each tab shows only its own engine's
+       RECV/SEND/ENGINE lines. */
     {
+        int out_ei = (bottom_log_tab==0)?0:1;
         int ly=y0+22;
         int box_h=LOG_H-26;
         frect(8,ly,rw-16,box_h,0,0,0);
         orect(8,ly,rw-16,box_h,55,55,55);
         int line_h=12;
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
-        int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_is_protocol(bottom_log_lines[i])) cnt++;
+        int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_engine(bottom_log_lines[i])==out_ei) cnt++;
         int show_n = cnt<max_lines ? cnt : max_lines;
         int drawn=0;
         for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
             char *ln = bottom_log_lines[i];
-            if(!ln[0] || !bottom_log_is_protocol(ln)) continue;
+            if(!ln[0] || bottom_log_engine(ln)!=out_ei) continue;
             int colR=180,colG=180,colB=180;
             if(strstr(ln,"[SEND")){ colR=150;colG=200;colB=255; }
             else if(strstr(ln,"[RECV")){ colR=255;colG=210;colB=150; }
             else if(strstr(ln,"[ENGINE")){ colR=255;colG=160;colB=120; }
-            /* label the engine as E1/E2 (matches the side panels) instead of the
-               raw [DIR eN] tag, then print the rest of the protocol line. */
-            int ei_out = strstr(ln,"e1]")?1:0;
-            const char *rest = strchr(ln,']'); rest = rest? rest+1 : ln; if(*rest==' ') rest++;
-            int rowy = ly+4+(show_n-1-drawn)*line_h;
-            if(ei_out){ dtxt(12, rowy, "E2:",1, 40,200,120); dtxt(12+27, rowy, rest,1, colR,colG,colB); }
-            else      { dtxt(12, rowy, "E1:",1, 70,150,255); dtxt(12+27, rowy, rest,1, colR,colG,colB); }
+            dtxt(12, ly+4+(show_n-1-drawn)*line_h, ln,1, colR,colG,colB);
             drawn++;
         }
-        if(cnt==0) dtxt(12, ly+4, "(no UCI output yet — load an engine and make a move)",1, 110,110,110);
+        if(cnt==0) dtxt(12, ly+4, bottom_log_tab==0? "(no Engine 1 (E1) output yet)":"(no Engine 2 (E2) output yet)",1, 110,110,110);
     }
 }
 
@@ -5346,7 +5338,7 @@ int main(void){
                         int tab_w=80;
                         for(int t=0;t<2;t++){
                             int tx=8+t*(tab_w+6);
-                            if(mx>=tx && mx<tx+tab_w){ bottom_log_tab=t; char tmsg[48]; snprintf(tmsg,sizeof(tmsg),"TAB -> %s", t==0?"OUTPUT":"LOG"); bottom_log_push(tmsg); goto skip; }
+                            if(mx>=tx && mx<tx+tab_w){ bottom_log_tab=t; char tmsg[48]; snprintf(tmsg,sizeof(tmsg),"TAB -> %s", t==0?"Out1":t==1?"Out2":"Log"); bottom_log_push(tmsg); goto skip; }
                         }
                     }
                 }
