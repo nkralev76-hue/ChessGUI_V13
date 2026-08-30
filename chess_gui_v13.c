@@ -92,7 +92,7 @@ typedef struct {
 } Move;
 
 /* ---- Layout ---- */
-static int SQ_SIZE = 48; /* v13 CMD: even smaller board — more room for bottom panels per request */
+static int SQ_SIZE = 44; /* v14.2: slightly smaller for equal gaps (was 48) */
 static int real_w = 0, real_h = 0;
 #define BRD      (SQ_SIZE*8)          /* pure board pixel size          */
 #define MENU_H   38
@@ -101,10 +101,11 @@ static int real_w = 0, real_h = 0;
 #define COORD_W  28                   /* rank labels strip (left)        */
 #define COORD_H  22                   /* file labels strip (bottom)      */
 #define BPAD      6                   /* padding inside wood frame       */
-#define BOARD_OX (COORD_W+BPAD)       /* pixel X where sq(0,0) starts    */
-#define BOARD_OY (MENU_H+CLOCK_BAR_H+BPAD) /* board below clock bar */
-#define FRAME_W  (COORD_W+BPAD+BRD+BPAD) /* wood frame + coords width   */
-#define FRAME_H  (CLOCK_BAR_H+BPAD+BRD+COORD_H) /* includes clock bar */
+#define BOARD_GAP 14                  /* v14.2: equal gap board<->clocks and board<->tabs */
+#define BOARD_OX (COORD_W+BOARD_GAP)       /* pixel X where sq(0,0) starts    */
+#define BOARD_OY (MENU_H+CLOCK_BAR_H+BOARD_GAP) /* board below clock bar */
+#define FRAME_W  (COORD_W+BOARD_GAP+BRD+BOARD_GAP) /* wood frame + coords width   */
+#define FRAME_H  (CLOCK_BAR_H+BOARD_GAP+BRD+COORD_H+BOARD_GAP) /* includes clock bar + equal gaps */
 #define LOG_H    150                  /* v13 CMD: much taller bottom log — request */
 #define PANEL_W  (SIDE_W-8)           /* uniform panel width */
 #define PANEL_H  105                  /* uniform panel height — larger per request, was 88 */
@@ -387,6 +388,15 @@ static int   tourney_waiting   = 0;    /* waiting between games      */
 /* Who plays white/black: 0=built-in, 1=UCI1, 2=UCI2, 3=human */
 static int   tourney_player[2] = {0, 0};  /* [0]=white, [1]=black   */
 static int   tourney_e1_engine = 0;       /* E1's engine type (never swapped) */
+/* v14.2: Real round-robin tournament for 3+ engines */
+#define MAX_RR_PLAYERS 4
+static int   tourney_is_rr = 0;
+static int   tourney_rr_num = 0;
+static int   tourney_rr_players[MAX_RR_PLAYERS];
+static float tourney_rr_score[MAX_RR_PLAYERS];
+static int   tourney_rr_sched[24][2];
+static int   tourney_rr_sched_len = 0;
+static int   tourney_rr_sched_idx = 0;
 
 /* ===================== v9: FEN INPUT DIALOG ===================== */
 static int   fen_dialog_active = 0;
@@ -2122,6 +2132,8 @@ static const char*TITEMS[]={
     "W: Built-in","W: UCI Engine 1","W: UCI Engine 2","W: Human",
     "--- Black player ---",
     "B: Built-in","B: UCI Engine 1","B: UCI Engine 2","B: Human",
+    "--- Real Tournament ---",
+    "Round Robin 3 engines (6g)","Round Robin all ready",
     "--- Actions ---",
     "Start tournament","Stop tournament"
 };
@@ -2184,7 +2196,7 @@ static void draw_menus(int mx,int my){
                 int is_sep = 0;
                 if(mi==1 && (ii==3||ii==12||ii==20||ii==23)) is_sep=1;
                 if(mi==2 && (ii==0||ii==2||ii==6)) is_sep=1;
-                if(mi==3 && (ii==0||ii==5||ii==10||ii==15)) is_sep=1;
+                if(mi==3 && (ii==0||ii==5||ii==10||ii==15||ii==18)) is_sep=1;
                 if(is_sep){
                     SDL_SetRenderDrawColor(ren,60,60,90,255);
                     SDL_RenderDrawLine(ren,ix+4,iy2+ih/2,ix+iw-4,iy2+ih/2);
@@ -2229,7 +2241,10 @@ static void draw_menus(int mx,int my){
                     if(ii==12&&tourney_player[1]==1)mk=1;
                     if(ii==13&&tourney_player[1]==2)mk=1;
                     if(ii==14&&tourney_player[1]==3)mk=1;
-                    if(ii==16&&tourney_active)mk=1;
+                    if(ii==16&&tourney_is_rr&&tourney_rr_num==3)mk=1;
+                    if(ii==17&&tourney_is_rr&&tourney_rr_num>0)mk=1;
+                    if(ii==19&&tourney_active&&!tourney_is_rr)mk=1;
+                    if(ii==19&&tourney_active&&tourney_is_rr)mk=1;
                 }
                 if(mk)dtxt_raw(ix+4,iy2+8,"*",1,100,220,100);
                 int txtx = ix+20;
@@ -2269,6 +2284,7 @@ static int  uci_spawn_engine(int ei, const char *path);
 static int  uci_send_raw(int ei, const char *s);
 static int  uci_recv_line(int ei, char *buf, int maxlen, int timeout_ms);
 static void tourney_start_now(void);
+static void tourney_start_round_robin(int mode);
 static void tourney_stop(void);
 static void tourney_record_result(void);
 /* v12.7: UCI ponder (permanent brain for external engines) */
@@ -2341,7 +2357,7 @@ static void handle_menu(int mx,int my){
             int is_sep=0;
             if(mi==1&&(ii==3||ii==12||ii==20||ii==23))is_sep=1;
             if(mi==2&&(ii==0||ii==2||ii==6))is_sep=1;
-            if(mi==3&&(ii==0||ii==5||ii==10||ii==15))is_sep=1;
+            if(mi==3&&(ii==0||ii==5||ii==10||ii==15||ii==18))is_sep=1;
             if(is_sep) continue;
             if(mx>=ix&&mx<ix+iw&&my>=iy2&&my<iy2+ih){
                 open_menu=-1;
@@ -2509,8 +2525,10 @@ static void handle_menu(int mx,int my){
                     else if(ii==12)tourney_player[1]=1;
                     else if(ii==13)tourney_player[1]=2;
                     else if(ii==14)tourney_player[1]=3;
-                    else if(ii==16)tourney_start_now();
-                    else if(ii==17)tourney_stop();
+                    else if(ii==16)tourney_start_round_robin(3);
+                    else if(ii==17)tourney_start_round_robin(0);
+                    else if(ii==19)tourney_start_now();
+                    else if(ii==20)tourney_stop();
                 }
                 if(mi==4){
                     /* v12.3: Options menu now just launches the overlay window */
@@ -2583,56 +2601,110 @@ static void draw_captured_box(int x,int y,int w,int h,int white_side,const char*
 }
 /* v12: small eval-history sparkline, drawn next to the material eval bar */
 static void draw_eval_sparkline(int x,int y,int w,int h){
-    // CMD: more beautiful per-move eval graph
+    // v14.2: улучшена графика — повече информация, по-красива
     frect(x,y,w,h,0,0,0); orect(x,y,w,h,70,70,70);
-    // grid
+    // хоризонтална мрежа
     SDL_SetRenderDrawColor(ren,28,28,28,255);
     for(int gy=1;gy<4;gy++){ int yy=y+h*gy/4; SDL_RenderDrawLine(ren,x,yy,x+w,yy); }
     SDL_SetRenderDrawColor(ren,60,60,60,255);
     SDL_RenderDrawLine(ren,x,y+h/2,x+w,y+h/2);
-    // Y labels
-    dtxt(x+w+4, y-4, "+5",1, 100,100,100);
-    dtxt(x+w+4, y+h/2-4, "0",1, 140,140,140);
-    dtxt(x+w+4, y+h-8, "-5",1, 100,100,100);
+    // Y етикети: +10, +5, 0, -5, -10 (центърът е 0)
+    dtxt_raw(x+w+4, y-4, "+10",1, 100,100,100);
+    dtxt_raw(x+w+4, y+h*25/100-4, "+5",1, 100,100,100);
+    dtxt_raw(x+w+4, y+h/2-4, "0",1, 140,140,140);
+    dtxt_raw(x+w+4, y+h*75/100-4, "-5",1, 100,100,100);
+    dtxt_raw(x+w+4, y+h-8, "-10",1, 100,100,100);
     int n=hist_n; if(n<1||w<20) return;
     int start=n>60?n-60:0;
     int cnt=n-start;
     int evfl = flip_board ^ (player_color==BLACK ? 1 : 0);
-    // vertical ticks per 5 moves
+    // вертикални тикове през 5 хода + номера на ходовете през 10
     SDL_SetRenderDrawColor(ren,35,35,35,255);
     for(int i=start;i<n;i++) if((i-start)%5==0){
         int px=x+(int)((float)(i-start)/(float)(cnt>1?cnt-1:1)*w);
         SDL_RenderDrawLine(ren,px,y,px,y+h);
+        if((i-start)%10==0 && i>=start){
+            char lbl[8]; snprintf(lbl,sizeof(lbl),"%d", i/2+1);
+            // само за бели ходове показваме номер, за да не се пренасища
+            if(i%2==0) dtxt_raw(px-6, y+h-8, lbl,1, 70,70,70);
+        }
     }
-    int prevx=0,prevy=0,have=0;
-    for(int i=start;i<n;i++){
+    // събираме точки за запълване и статистика
+    int pts_x[64], pts_y[64], pts_ev[64];
+    int pcnt=0;
+    int min_ev=10000, max_ev=-10000, sum_ev=0;
+    for(int i=start;i<n && pcnt<64;i++){
         int ev=(i<EVAL_HIST_MAX)?eval_hist[i]:0;
         if(evfl) ev=-ev;
-        if(ev>1000)ev=1000; if(ev<-1000)ev=-1000;
-        float frac=0.5f-ev/2000.0f;
+        if(ev>1500) ev=1500; if(ev<-1500) ev=-1500;
+        if(ev<min_ev) min_ev=ev;
+        if(ev>max_ev) max_ev=ev;
+        sum_ev+=ev;
+        float frac=0.5f - ev/3000.0f;
+        if(frac<0) frac=0; if(frac>1) frac=1;
         int px=x+(int)((float)(i-start)/(float)(cnt>1?cnt-1:1)*w);
         int py=y+(int)(frac*h);
-        // clamp
         if(py<y) py=y; if(py>y+h) py=y+h;
-        if(have){
-            // color per segment: orange if eval>0, blue if <0, gray if near 0
-            int mid = (prevy+py)/2;
-            int is_pos = ev>30;
-            int is_neg = ev<-30;
-            if(is_pos) SDL_SetRenderDrawColor(ren,255,165,0,255);
-            else if(is_neg) SDL_SetRenderDrawColor(ren,80,130,220,255);
-            else SDL_SetRenderDrawColor(ren,180,180,180,255);
-            SDL_RenderDrawLine(ren,prevx,prevy,px,py);
-            // thicker line via second pixel
-            SDL_RenderDrawLine(ren,prevx,prevy+1,px,py+1);
+        pts_x[pcnt]=px; pts_y[pcnt]=py; pts_ev[pcnt]=ev; pcnt++;
+    }
+    if(pcnt<1) { orect(x,y,w,h,70,70,70); return; }
+    // запълване под линията до центъра с полупрозрачен цвят
+    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+    int mid_y = y+h/2;
+    for(int i=0;i<pcnt-1;i++){
+        int x1=pts_x[i], y1=pts_y[i], x2=pts_x[i+1], y2=pts_y[i+1];
+        int ev = pts_ev[i+1];
+        if(ev>30) SDL_SetRenderDrawColor(ren,255,165,0,28);
+        else if(ev<-30) SDL_SetRenderDrawColor(ren,80,130,220,28);
+        else SDL_SetRenderDrawColor(ren,180,180,180,18);
+        // вертикален градиент: рисуваме колони между точките
+        int steps = abs(x2-x1);
+        if(steps<1) steps=1;
+        for(int s=0;s<=steps;s++){
+            float t=(float)s/steps;
+            int py = (int)(y1 + t*(y2-y1));
+            int px = x1 + (int)(t*(x2-x1));
+            if(py < mid_y) SDL_RenderDrawLine(ren, px, py, px, mid_y);
+            else SDL_RenderDrawLine(ren, px, mid_y, px, py);
         }
-        // dot per move
+    }
+    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
+    // линия на графиката — по-дебела и с цвят според оценката
+    int prevx=pts_x[0], prevy=pts_y[0], have=1;
+    for(int i=1;i<pcnt;i++){
+        int px=pts_x[i], py=pts_y[i], ev=pts_ev[i];
+        int is_pos = ev>30;
+        int is_neg = ev<-30;
+        if(is_pos) SDL_SetRenderDrawColor(ren,255,165,0,255);
+        else if(is_neg) SDL_SetRenderDrawColor(ren,80,130,220,255);
+        else SDL_SetRenderDrawColor(ren,180,180,180,255);
+        SDL_RenderDrawLine(ren,prevx,prevy,px,py);
+        SDL_RenderDrawLine(ren,prevx,prevy+1,px,py+1);
+        prevx=px; prevy=py;
+    }
+    // точки за всеки ход
+    for(int i=0;i<pcnt;i++){
+        int px=pts_x[i], py=pts_y[i], ev=pts_ev[i];
         SDL_SetRenderDrawColor(ren, ev>30?255: (ev<-30?80:180), ev>30?165: (ev<-30?130:180), ev>30?0: (ev<-30?220:180),255);
         SDL_Rect d={px-2,py-2,4,4}; SDL_RenderFillRect(ren,&d);
         SDL_SetRenderDrawColor(ren,0,0,0,255); SDL_RenderDrawRect(ren,&d);
-        prevx=px; prevy=py; have=1;
     }
-    // border again
+    // информационен оверлей: текуща оценка, мин/макс, средна
+    if(pcnt>0){
+        int cur_ev = pts_ev[pcnt-1];
+        char info[64];
+        snprintf(info,sizeof(info),"%.2f", cur_ev/100.0);
+        int colR = cur_ev>30?255: (cur_ev<-30?80:180);
+        int colG = cur_ev>30?165: (cur_ev<-30?130:180);
+        int colB = cur_ev>30?0: (cur_ev<-30?220:180);
+        // фон за текста
+        frect(x+2, y+2, 52, 12, 20,20,20);
+        orect(x+2, y+2, 52, 12, 60,60,60);
+        dtxt_raw(x+6, y+4, info,1, colR,colG,colB);
+        // мин/макс в горния десен ъгъл
+        char mm[32]; snprintf(mm,sizeof(mm),"%+.1f/%+.1f", max_ev/100.0, min_ev/100.0);
+        dtxt_raw(x+w-62, y+4, mm,1, 120,120,120);
+    }
     orect(x,y,w,h,70,70,70);
 }
 /* v12.1: lightweight opening-name recognizer (coordinate-notation prefix match).
@@ -2957,15 +3029,31 @@ static void draw_sidebar(int mx,int my){
         orect(FRAME_W+4,sy,sw-8,dyn_panel_h,255,165,0);
         dtxt(FRAME_W+9,sy+7,"TOURNAMENT",1,0,0,0);
         dtxt(FRAME_W+8,sy+6,"TOURNAMENT",1,255,165,0);
-        char ts[64];
-        sprintf(ts,"G%d/%d  E1 %.1f  E2 %.1f",
-            tourney_played+1,tourney_total,
-            tourney_score[0],tourney_score[1]);
-        dtxt(FRAME_W+8,sy+24,ts,1,200,200,200);
-        if(tourney_waiting){
-            dtxt(FRAME_W+8,sy+40,"Next game soon...",1,180,160,100);
+        if(tourney_is_rr){
+            char ts[64];
+            snprintf(ts,sizeof(ts),"RR G%d/%d", tourney_played+1, tourney_total);
+            dtxt(FRAME_W+8,sy+22,ts,1,200,200,200);
+            char line[96]=""; int off=0;
+            for(int i=0;i<tourney_rr_num && off<90;i++){
+                const char *nm = tourney_rr_players[i]==0?"Blt": tourney_rr_players[i]==1?"E1": tourney_rr_players[i]==2?"E2":"Hum";
+                off+=snprintf(line+off,sizeof(line)-off,"%s:%.1f ", nm, tourney_rr_score[i]);
+            }
+            dtxt(FRAME_W+8,sy+38,line,1,220,180,120);
+            if(tourney_waiting){
+                char nxt[64]; snprintf(nxt,sizeof(nxt),"Next: %d vs %d", tourney_player[0], tourney_player[1]);
+                dtxt(FRAME_W+8,sy+54,nxt,1,180,160,100);
+            }
         } else {
-            dtxt(FRAME_W+8,sy+40,"CMD uniform panel",1,90,90,90);
+            char ts[64];
+            sprintf(ts,"G%d/%d  E1 %.1f  E2 %.1f",
+                tourney_played+1,tourney_total,
+                tourney_score[0],tourney_score[1]);
+            dtxt(FRAME_W+8,sy+24,ts,1,200,200,200);
+            if(tourney_waiting){
+                dtxt(FRAME_W+8,sy+40,"Next game soon...",1,180,160,100);
+            } else {
+                dtxt(FRAME_W+8,sy+40,"CMD uniform panel",1,90,90,90);
+            }
         }
         sy+=dyn_panel_h+6;
     }
@@ -3108,7 +3196,7 @@ static void draw_sidebar(int mx,int my){
                 dtxt(FRAME_W+10, ny, nbuf, 1, 120,120,120);
                 /* small eval bar indicator — orange for cmd */
                 char evb2[16]; snprintf(evb2,sizeof(evb2),"%s", evals);
-                dtxt(FRAME_W+panel_w-45, ny, evb2, 1, 255,165,0);
+                dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 255,165,0);
             } else {
                 dtxt(FRAME_W+10, sy+30, "(no analysis yet)", 1, 110,110,120);
             }
@@ -3319,23 +3407,18 @@ static void render(int mx,int my){
     frect(fx, fy, fw, CLOCK_BAR_H, 0,0,0);
     SDL_SetRenderDrawColor(ren,70,70,70,255);
     SDL_RenderDrawLine(ren, fx, fy+CLOCK_BAR_H, fx+fw, fy+CLOCK_BAR_H);
-    /* draw clocks centered in bar — W left, B right */
+    /* draw clocks centered in bar — moved inward, no turn text */
     {
         int cw = 22*4+26; /* clock width from draw_clock */
         int cy = fy + (CLOCK_BAR_H-30)/2 + 4;
-        int wx = BOARD_OX;
-        int bx = BOARD_OX+BRD - cw + 6; /* right aligned */
-        // label + clock
-        dtxt(wx-2, cy-12, "W",1, 180,180,180);
+        int wx = fx + fw/2 - cw - 24;
+        int bx = fx + fw/2 + 24;
+        if(wx < fx+8) wx = fx+8;
+        if(bx + cw > fx+fw-8) bx = fx+fw-8 - cw;
+        dtxt_raw(wx-2, cy-12, "W",1, 180,180,180);
         draw_clock(wx+10, cy, clk_w, turn==WHITE&&!game_over);
-        dtxt(bx-14, cy-12, "B",1, 180,180,180);
+        dtxt_raw(bx-14, cy-12, "B",1, 180,180,180);
         draw_clock(bx, cy, clk_b, turn==BLACK&&!game_over);
-        // small turn indicator
-        if(!game_over){
-            const char *turn_s = turn==WHITE ? "< WHITE TO MOVE" : "BLACK TO MOVE >";
-            int tx = fx + fw/2 - (int)strlen(turn_s)*4;
-            dtxt(tx, cy+8, turn_s, 1, turn==WHITE?255:100, turn==WHITE?165:150, 0);
-        }
     }
     if(cur_theme<=4) orect(BOARD_OX-2,BOARD_OY-2,BRD+4,BRD+4, 255,165,0); /* orange accent for CMD */
     else if(cur_theme==7) orect(BOARD_OX-2,BOARD_OY-2,BRD+4,BRD+4, 90,140,220); /* blue accent for CMD Blue */
@@ -5027,17 +5110,12 @@ static void uci_ponder_opponent_moved(const Move *m){
 /* ===================== v10: TOURNAMENT SUBSYSTEM ===================== */
 static void tourney_stop(void){
     stop_analysis();stop_pondering();stop_ai();
-    /* v12.6: tell the external engines to abort any running search now,
-       instead of letting them think until their movetime expires (the next
-       start would then pick up their stale bestmove as an "instant move"). */
     for(int _ei=0;_ei<MAX_ENGINES;_ei++)
         if(uci_eng[_ei].ready && UCI_VALID(_ei)) uci_send_raw(_ei,"stop");
-    tourney_active=0;tourney_waiting=0;
-    /* v12.4 FIX: the tournament "stopped" but the AI-vs-AI game kept
-       running forever because aivsai stayed 1. Hand the board over to
-       the human: the side to move becomes yours. */
+    tourney_active=0;tourney_waiting=0; tourney_is_rr=0;
     if(aivsai){ aivsai=0; player_color=turn; }
-    snprintf(msg,sizeof(msg),"Tournament stopped. E1:%.1f E2:%.1f",tourney_score[0],tourney_score[1]);
+    if(tourney_is_rr) snprintf(msg,sizeof(msg),"RR Tournament stopped.");
+    else snprintf(msg,sizeof(msg),"Tournament stopped. E1:%.1f E2:%.1f",tourney_score[0],tourney_score[1]);
 }
 
 static void tourney_begin_game(void){
@@ -5089,6 +5167,55 @@ static void tourney_autoset_players(void){
     }
 }
 
+
+/* v14.2: Real tournament — round robin among 3+ engines */
+static void tourney_build_rr_schedule(void){
+    tourney_rr_sched_len = 0;
+    tourney_rr_sched_idx = 0;
+    for(int i=0;i<tourney_rr_num;i++) for(int j=i+1;j<tourney_rr_num;j++){
+        if(tourney_rr_sched_len+1 < 24){
+            tourney_rr_sched[tourney_rr_sched_len][0] = tourney_rr_players[i];
+            tourney_rr_sched[tourney_rr_sched_len][1] = tourney_rr_players[j];
+            tourney_rr_sched_len++;
+            tourney_rr_sched[tourney_rr_sched_len][0] = tourney_rr_players[j];
+            tourney_rr_sched[tourney_rr_sched_len][1] = tourney_rr_players[i];
+            tourney_rr_sched_len++;
+        }
+    }
+    tourney_total = tourney_rr_sched_len;
+    tourney_played = 0;
+    for(int i=0;i<tourney_rr_num;i++) tourney_rr_score[i]=0;
+    tourney_score[0]=tourney_score[1]=0;
+}
+static void tourney_start_round_robin(int mode){
+    // mode 3 = exactly 3 engines (built-in + 2 UCI if ready), 0 = all ready
+    int players[4]; int n=0;
+    // built-in always available
+    players[n++]=0;
+    if(uci_eng[0].ready) players[n++]=1;
+    if(uci_eng[1].ready) players[n++]=2;
+    // if wants 3 and we have <3, just use what we have
+    if(mode==3){
+        if(n<2){ bottom_log_push("RR: need at least 2 engines"); return; }
+        // keep n as is (2 or 3)
+    } else {
+        // all ready: already n
+        if(n<2){ bottom_log_push("RR: need at least 2 engines"); return; }
+    }
+    tourney_is_rr = 1;
+    tourney_rr_num = n;
+    for(int i=0;i<n;i++) tourney_rr_players[i]=players[i];
+    tourney_build_rr_schedule();
+    tourney_active=1; tourney_waiting=0;
+    char msg2[128]; snprintf(msg2,sizeof(msg2),"Round Robin %d players, %d games", n, tourney_rr_sched_len);
+    bottom_log_push(msg2);
+    uci_dbg_log("TOURN", -1, msg2);
+    // setup first game
+    tourney_player[0]=tourney_rr_sched[0][0];
+    tourney_player[1]=tourney_rr_sched[0][1];
+    tourney_e1_engine=tourney_rr_players[0];
+    tourney_begin_game();
+}
 static void tourney_start_now(void){
     tourney_autoset_players();
     tourney_active=1;tourney_played=0;
@@ -5104,7 +5231,6 @@ static void tourney_start_now(void){
 static void tourney_record_result(void){
     if(!tourney_active) return;
     float ws=0,bs=0;
-    /* Determine result from msg string */
     if(strstr(msg,"White wins")||strstr(msg,"white wins")||
        (strstr(msg,"checkmate")&&turn==BLACK)){
         ws=1;
@@ -5116,7 +5242,40 @@ static void tourney_record_result(void){
     } else if(strstr(msg,"Time!")&&strstr(msg,"Black wins")){
         bs=1;
     } else {
-        ws=0.5f;bs=0.5f; /* draw */
+        ws=0.5f;bs=0.5f;
+    }
+    if(tourney_is_rr){
+        // find indices of current white/black in rr_players
+        int wi=-1, bi=-1;
+        for(int i=0;i<tourney_rr_num;i++){
+            if(tourney_rr_players[i]==tourney_player[0]) wi=i;
+            if(tourney_rr_players[i]==tourney_player[1]) bi=i;
+        }
+        if(ws==1.0f && wi>=0) tourney_rr_score[wi]+=1.0f;
+        else if(bs==1.0f && bi>=0) tourney_rr_score[bi]+=1.0f;
+        else { if(wi>=0) tourney_rr_score[wi]+=0.5f; if(bi>=0) tourney_rr_score[bi]+=0.5f; }
+        // also keep E1/E2 scores for display compatibility
+        tourney_score[0]+= (ws==1?1: ws==0?0:0.5);
+        tourney_score[1]+= (bs==1?1: bs==0?0:0.5);
+        tourney_played++;
+        tourney_rr_sched_idx++;
+        if(tourney_played>=tourney_total || tourney_rr_sched_idx>=tourney_rr_sched_len){
+            tourney_active=0; tourney_waiting=0; tourney_is_rr=0;
+            if(aivsai){ aivsai=0; player_color=turn; }
+            char buf[256]; int off=snprintf(buf,sizeof(buf),"RR done! ");
+            for(int i=0;i<tourney_rr_num;i++){
+                const char *nm = tourney_rr_players[i]==0?"Built-in": tourney_rr_players[i]==1? (uci_eng[0].name[0]?uci_eng[0].name:"UCI1"): (uci_eng[1].name[0]?uci_eng[1].name:"UCI2");
+                off+=snprintf(buf+off,sizeof(buf)-off,"%s:%.1f ", nm, tourney_rr_score[i]);
+            }
+            strncpy(msg,buf,sizeof(msg)-1);
+        } else {
+            tourney_player[0]=tourney_rr_sched[tourney_rr_sched_idx][0];
+            tourney_player[1]=tourney_rr_sched[tourney_rr_sched_idx][1];
+            tourney_waiting=1;
+            tourney_next_at=SDL_GetTicks()+tourney_delay_ms;
+            snprintf(msg,sizeof(msg),"RR Game %d/%d done — next %d vs %d soon...", tourney_played, tourney_total, tourney_player[0], tourney_player[1]);
+        }
+        return;
     }
     /* Assign points to E1/E2 correctly based on who is currently white/black.
        tourney_player[0] = current white, tourney_player[1] = current black.
@@ -5148,6 +5307,8 @@ static void tourney_record_result(void){
             tourney_played,tourney_score[0],tourney_score[1]);
     }
 }
+
+
 
 /* ===================== v9: FEN DIALOG DRAWING ===================== */
 static void draw_fen_dialog(void){
@@ -5464,10 +5625,10 @@ int main(void){
                        limiting dimension (typically after maximizing), pushing
                        the bottom log panel past the window edge and clipping a
                        line off it. Width term was already correct. */
-                    int ns=MIN((new_w-SIDE_W-COORD_W-2*BPAD)/8,
-                               (new_h-MENU_H-CLOCK_BAR_H-BPAD-COORD_H-LOG_H)/8);
+                    int ns=MIN((new_w-SIDE_W-COORD_W-2*BOARD_GAP)/8,
+                               (new_h-MENU_H-CLOCK_BAR_H-2*BOARD_GAP-COORD_H-LOG_H)/8);
                     SQ_SIZE=ns;
-                    if(SQ_SIZE<48)SQ_SIZE=48;
+                    if(SQ_SIZE<40)SQ_SIZE=40;
                     if(SQ_SIZE>128)SQ_SIZE=128;
                 }
             }
