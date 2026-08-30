@@ -5555,6 +5555,18 @@ int main(void){
                 }
                 /* v9: FEN dialog keyboard */
                 if(fen_dialog_active){
+                    if(ctrl && k==SDLK_v){
+                        char *clip = SDL_GetClipboardText();
+                        if(clip){
+                            int avail = (int)sizeof(fen_dialog_buf) - fen_dialog_len - 1;
+                            if(avail>0){
+                                strncat(fen_dialog_buf, clip, avail);
+                                fen_dialog_len = strlen(fen_dialog_buf);
+                            }
+                            SDL_free(clip);
+                        }
+                        goto skip_normal_keys;
+                    }
                     if(k==SDLK_ESCAPE){fen_dialog_active=0;SDL_StopTextInput();}
                     else if(k==SDLK_RETURN||k==SDLK_KP_ENTER){
                         if(fen_dialog_len>10){
@@ -5580,6 +5592,18 @@ int main(void){
                 }
                 /* v10: engine path dialog keyboard (Linux) */
                 if(path_dialog_active){
+                    if(ctrl && k==SDLK_v){
+                        char *clip = SDL_GetClipboardText();
+                        if(clip){
+                            int avail = (int)sizeof(path_dialog_buf) - path_dialog_len - 1;
+                            if(avail>0){
+                                strncat(path_dialog_buf, clip, avail);
+                                path_dialog_len = strlen(path_dialog_buf);
+                            }
+                            SDL_free(clip);
+                        }
+                        goto skip_normal_keys;
+                    }
                     if(k==SDLK_ESCAPE){path_dialog_active=0;SDL_StopTextInput();}
                     else if(k==SDLK_RETURN||k==SDLK_KP_ENTER){
                         path_dialog_active=0;SDL_StopTextInput();
@@ -5604,6 +5628,18 @@ int main(void){
                 }
                 /* v10: string option dialog */
                 if(stropt_dialog_active){
+                    if(ctrl && k==SDLK_v){
+                        char *clip = SDL_GetClipboardText();
+                        if(clip){
+                            int avail = (int)sizeof(stropt_dialog_buf) - stropt_dialog_len - 1;
+                            if(avail>0){
+                                strncat(stropt_dialog_buf, clip, avail);
+                                stropt_dialog_len = strlen(stropt_dialog_buf);
+                            }
+                            SDL_free(clip);
+                        }
+                        goto skip_normal_keys;
+                    }
                     if(k==SDLK_ESCAPE){stropt_dialog_active=0;SDL_StopTextInput();}
                     else if(k==SDLK_RETURN||k==SDLK_KP_ENTER){
                         stropt_dialog_active=0;SDL_StopTextInput();
