@@ -3329,10 +3329,10 @@ static void draw_bottom_log(void){
     frect(0,y0,rw,LOG_H, 10,10,10);
     SDL_SetRenderDrawColor(ren,70,70,70,255);
     SDL_RenderDrawLine(ren,0,y0,rw,y0);
-    // tabs — Out1 / Out2 = per-engine raw UCI, Log = game/status messages
+    // tabs — Out1 / Out2 = per-engine raw UCI, Log = a1 corner aligned
     int tab_w=70, tab_h=18;
     for(int t=0;t<3;t++){
-        int tx=8+t*(tab_w+6), ty=y0;
+        int tx=BOARD_OX + t*(tab_w+6), ty=y0;
         int active=(t==bottom_log_tab);
         frect(tx,ty,tab_w,tab_h, active?28:10, active?20:10, active?0:10);
         if(active) orect(tx,ty,tab_w,tab_h,255,165,0); else orect(tx,ty,tab_w,tab_h,60,60,60);
@@ -5679,7 +5679,7 @@ int main(void){
                     if(my>=y0 && my < y0+18){
                         int tab_w=70;
                         for(int t=0;t<3;t++){
-                            int tx=8+t*(tab_w+6);
+                            int tx=BOARD_OX + t*(tab_w+6);
                             if(mx>=tx && mx<tx+tab_w){ bottom_log_tab=t; char tmsg[48]; snprintf(tmsg,sizeof(tmsg),"TAB -> %s", t==0?"Out1":t==1?"Out2":"Log"); bottom_log_push(tmsg); goto skip; }
                         }
                     }
