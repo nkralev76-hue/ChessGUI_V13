@@ -3184,7 +3184,8 @@ static void draw_sidebar(int mx,int my){
                     int ny = sy + per_h - 14;
                     dtxt(FRAME_W+10, ny, nbuf, 1, 120,120,120);
                     char evb2[16]; snprintf(evb2,sizeof(evb2),"%s", evals);
-                    dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 255,165,0);
+                    if(is_blue) dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 80,130,220);
+                    else dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 255,165,0);
                 } else {
                     dtxt(FRAME_W+10, sy+37, "(no analysis yet)", 1, 110,110,120);
                 }
