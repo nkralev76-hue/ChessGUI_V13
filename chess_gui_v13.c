@@ -3106,7 +3106,7 @@ static void draw_sidebar(int mx,int my){
             char hdr[120];
             const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
             snprintf(hdr,sizeof(hdr),"%s%s", side_lbl, ename);
-            int maxch=(int)((panel_w-16)/(9*UI_TEXT_SCALE)); if((int)strlen(hdr)>maxch){ hdr[maxch-3]=0; strcat(hdr,"..."); }
+            int maxch=(int)((panel_w-40)/(9*UI_TEXT_SCALE)); if((int)strlen(hdr)>maxch){ hdr[maxch-3]=0; strcat(hdr,"..."); }
             dtxt(FRAME_W+9, sy+5, hdr, 1, 0,0,0);
             dtxt(FRAME_W+8, sy+4, hdr, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
             /* thinking indicator — colored dot per side (green for White, blue
@@ -3136,8 +3136,8 @@ static void draw_sidebar(int mx,int my){
             else if(dnps>=1000) snprintf(nps_s,sizeof(nps_s),"%.0fK",dnps/1000.0);
             else snprintf(nps_s,sizeof(nps_s),"%lld", dnps);
             snprintf(st1,sizeof(st1),"D%d  %s  NPS:%s", disp_depth, evals, nps_s);
-            dtxt(FRAME_W+11, sy+17, st1, 1, 0,0,0);
-            dtxt(FRAME_W+10, sy+16, st1, 1, 200,200,200);
+            dtxt(FRAME_W+11, sy+22, st1, 1, 0,0,0);
+            dtxt(FRAME_W+10, sy+21, st1, 1, 200,200,200);
             /* PV */
             const char *pvsrc = eng_analysis[ei].has_data ? eng_analysis[ei].pv : g_pv_str;
             if(pvsrc[0]){
