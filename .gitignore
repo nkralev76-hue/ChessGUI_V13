@@ -1,6 +1,10 @@
-# Build artifacts / binaries
+# Build artifacts / binaries (ignored by default)
 *.exe
 *.dll
+# Portable distribution — tracked for all machines
+!Ferz_v13_dist/*.exe
+!Ferz_v13_dist/*.dll
+!Ferz_v13_dist/**/*.png
 
 # Logs
 *.log

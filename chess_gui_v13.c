@@ -29,6 +29,7 @@
 #include <time.h>
 #include <stdbool.h>
 #include <stdatomic.h>
+#include <ctype.h>
 /* Platform headers for UCI engine process management */
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
@@ -96,7 +97,7 @@ static int real_w = 0, real_h = 0;
 #define BRD      (SQ_SIZE*8)          /* pure board pixel size          */
 #define MENU_H   38
 #define CLOCK_BAR_H 32                /* v13 CMD: clocks above board */
-#define SIDE_W   420                  /* wider sidebar for larger uniform text */
+#define SIDE_W   480                  /* v14: wider for 1.2x text (was 420) */
 #define COORD_W  28                   /* rank labels strip (left)        */
 #define COORD_H  22                   /* file labels strip (bottom)      */
 #define BPAD      6                   /* padding inside wood frame       */
@@ -184,6 +185,8 @@ static int retro_crt_curve = 0;
 static int piece_shadows   = 0; /* user requested: no shadows */
 static int retro_coords_big = 0; /* user requested: no big coords */
 static int retro_piece_style = 0;
+/* v14: UI text scale — 1.2 requested for readability */
+static double UI_TEXT_SCALE = 1.2;
 
 /* ---- GUI state ---- */
 BBoard B;
@@ -1766,6 +1769,67 @@ static int parse_fen(const char *fen){
     return 1;
 }
 
+/* ===================== FEN GENERATOR (v14) ===================== */
+static void board_to_fen(char *out, size_t maxlen){
+    int pos=0;
+    for(int r=0;r<8;r++){
+        int empty=0;
+        for(int c=0;c<8;c++){
+            int sq=r*8+c;
+            int piece=0;
+            for(int col=0;col<2;col++) for(int t=0;t<6;t++) if(BB_GET(B.pieces[col][t],sq)) piece=(col==WC?1:-1)*(t+1);
+            if(piece==0) empty++;
+            else{
+                if(empty){ if(pos<(int)maxlen-2) out[pos++]='0'+empty; empty=0; }
+                char ch='?';
+                switch(abs(piece)){case PAWN:ch='p';break;case KNIGHT:ch='n';break;case BISHOP:ch='b';break;case ROOK:ch='r';break;case QUEEN:ch='q';break;case KING:ch='k';break;}
+                if(piece>0) ch=toupper((unsigned char)ch);
+                if(pos<(int)maxlen-1) out[pos++]=ch;
+            }
+        }
+        if(empty){ if(pos<(int)maxlen-1) out[pos++]='0'+empty; }
+        if(r!=7 && pos<(int)maxlen-1) out[pos++]='/';
+    }
+    if(pos<(int)maxlen-1) out[pos++]=' ';
+    if(pos<(int)maxlen-1) out[pos++]=(turn==WHITE?'w':'b');
+    if(pos<(int)maxlen-1) out[pos++]=' ';
+    if(B.cr==0){ if(pos<(int)maxlen-1) out[pos++]='-'; }
+    else{
+        if(B.cr&CR_WK && pos<(int)maxlen-1) out[pos++]='K';
+        if(B.cr&CR_WQ && pos<(int)maxlen-1) out[pos++]='Q';
+        if(B.cr&CR_BK && pos<(int)maxlen-1) out[pos++]='k';
+        if(B.cr&CR_BQ && pos<(int)maxlen-1) out[pos++]='q';
+    }
+    if(pos<(int)maxlen-1) out[pos++]=' ';
+    if(B.ep>=0){
+        char file='a'+B.ep;
+        char rank=(turn==WHITE?'6':'3');
+        if(pos<(int)maxlen-1) out[pos++]=file;
+        if(pos<(int)maxlen-1) out[pos++]=rank;
+    } else {
+        if(pos<(int)maxlen-1) out[pos++]='-';
+    }
+    {
+        char tmp[16]; int n=snprintf(tmp,sizeof tmp," %d",B.fifty);
+        for(int i=0;i<n && pos<(int)maxlen-1;i++) out[pos++]=tmp[i];
+    }
+    {
+        int fm = hist_n/2 + 1;
+        char tmp[16]; int n=snprintf(tmp,sizeof tmp," %d",fm);
+        for(int i=0;i<n && pos<(int)maxlen-1;i++) out[pos++]=tmp[i];
+    }
+    out[pos]=0;
+}
+static char cached_fen[256]="";
+static void update_cached_fen(void){ board_to_fen(cached_fen,sizeof cached_fen); }
+static void copy_fen_to_clipboard(void){
+    update_cached_fen();
+    if(SDL_SetClipboardText(cached_fen)==0) bottom_log_push("FEN copied to clipboard");
+    else bottom_log_push("FEN copy failed");
+    uci_dbg_log("FEN", -1, cached_fen);
+}
+static int fen_panel_x=0, fen_panel_y=0, fen_panel_w=0, fen_panel_h=0;
+
 /* ===================== DRAW HELPERS ===================== */
 static void frect(int x,int y,int w,int h,int R,int Gv,int B){
     SDL_SetRenderDrawColor(ren,R,Gv,B,255);
@@ -1876,9 +1940,21 @@ static const unsigned char PF[128][9]={
 };
 static void dtxt(int x,int y,const char*t,int sc,int R,int Gv,int B){
     SDL_SetRenderDrawColor(ren,R,Gv,B,255);
+    double eff = sc * UI_TEXT_SCALE;
     for(int ci=0;t[ci];ci++){unsigned char ch=(unsigned char)t[ci];if(ch>127)continue;
+        double base_x = x + ci * 9 * eff;
         for(int row=0;row<9;row++)for(int bit=0;bit<8;bit++)
-            if(PF[ch][row]&(0x80>>bit)){SDL_Rect px={x+ci*(8*sc+sc)+bit*sc,y+row*sc,sc,sc};SDL_RenderFillRect(ren,&px);}
+            if(PF[ch][row]&(0x80>>bit)){
+                float fx = (float)(base_x + bit*eff);
+                float fy = (float)(y + row*eff);
+                float fw = (float)eff;
+                float fh = (float)eff;
+#if SDL_VERSION_ATLEAST(2,0,10)
+                SDL_FRect fr={fx,fy,fw,fh}; SDL_RenderFillRectF(ren,&fr);
+#else
+                SDL_Rect ir={(int)round(fx),(int)round(fy),(int)ceil(fw),(int)ceil(fh)}; SDL_RenderFillRect(ren,&ir);
+#endif
+            }
     }
 }
 static void sq2px(int r,int c,int*px,int*py){
@@ -2053,16 +2129,18 @@ static const char*HITEMS[]={
     "L        Load position (FEN)",
     "T        Start tournament",
     "Ctrl+S    Save game as PGN",
+    "Y/Ctrl+C Copy FEN (FEN panel)",
     "--- Mouse ---",
     "Drag piece   Move a piece",
     "Right-drag   Draw arrow",
+    "Click FEN panel to copy FEN",
     "--- Menus ---",
     "Game      New / Load / Save",
     "Settings  Theme, Time, Ponder",
     "Engine    Add / manage UCI",
     "C         Copy visible tab"
 };
-#define N_HELP 17
+#define N_HELP 19
 static const char*OITEMS[]={
     "Engine 1 options...",
     "Engine 2 options...",
@@ -2079,7 +2157,7 @@ static const char*menu_item(int mi,int ii){
 static void draw_menus(int mx,int my){
     frect(0,0,WIN_W,MENU_H,0,0,0);
     SDL_SetRenderDrawColor(ren,80,80,80,255);SDL_RenderDrawLine(ren,0,MENU_H-1,WIN_W,MENU_H-1);
-    if(!ai_thinking){int tw=strlen(msg)*9;if(tw<WIN_W-200)dtxt(WIN_W-tw-4,14,msg,1,130,130,160);}
+    if(!ai_thinking){int tw=(int)(strlen(msg)*9*UI_TEXT_SCALE);if(tw<WIN_W-200)dtxt(WIN_W-tw-4,14,msg,1,130,130,160);}
     int mw=90,mx0=4,gap=4;
     for(int mi=0;mi<N_MENUS;mi++){
         int bx=mx0+mi*(mw+gap),by=3,bh=MENU_H-6;
@@ -2087,7 +2165,7 @@ static void draw_menus(int mx,int my){
         frect(bx,by,mw,bh, act?48: (hov?28:0), act?26:(hov?28:0), act?0:(hov?28:0)); /* CMD: orange when active, gray when hover */
         if(act) orect(bx,by,mw,bh,255,165,0);
         else if(hov) orect(bx,by,mw,bh,90,90,90);
-        int tw=strlen(MNAME[mi])*9+9;
+        int tw=(int)(strlen(MNAME[mi])*9*UI_TEXT_SCALE+9*UI_TEXT_SCALE);
         dtxt(bx+(mw-tw)/2,by+11,MNAME[mi],1,act?255:(hov?240:210),act?255:(hov?255:230),act?255:(hov?240:210));
         if(open_menu==mi){
             int n=menu_count(mi),ih=26,iw=(mi==5)?320:220,ix=bx,iy=MENU_H;
@@ -2493,7 +2571,7 @@ static void draw_captured_box(int x,int y,int w,int h,int white_side,const char*
     int md=material_diff();
     if((white_side&&md>0)||(!white_side&&md<0)){
         char b[8]; snprintf(b,sizeof b,"+%d", white_side?md:-md);
-        dtxt(x+w-(int)strlen(b)*9, y, b,1,225,185,90);
+        dtxt(x+w-(int)(strlen(b)*9*UI_TEXT_SCALE), y, b,1,225,185,90);
     }
 }
 /* v12: small eval-history sparkline, drawn next to the material eval bar */
@@ -2752,7 +2830,61 @@ static void draw_retro_overlays(void){
     }
 }
 
-static void draw_sidebar(void){
+/* v14: helper to draw EVAL panel (extracted for interleaving between engines) */
+static void draw_eval_panel_v14(int sy, int sw, int dyn_panel_h){
+    // Uniform EVAL panel — fixed overlap, fills width
+    frect(FRAME_W+4,sy,sw-8,dyn_panel_h,0,0,0);
+    orect(FRAME_W+4,sy,sw-8,dyn_panel_h,70,70,70);
+    dtxt(FRAME_W+9,sy+5,"EVAL",1,0,0,0);
+    dtxt(FRAME_W+8,sy+4,"EVAL",1,255,165,0);
+    {
+        char di[64]; char engname[64];
+        int show_uci = use_uci_engine; int show_ei=active_engine;
+        if(tourney_active||aivsai){ int tp=(turn==WHITE)?tourney_player[0]:tourney_player[1]; if(tp==1){show_uci=1;show_ei=0;} else if(tp==2){show_uci=1;show_ei=1;} else show_uci=0; }
+        strncpy(engname, show_uci?uci_eng[show_ei].path:"StrongEngine",63);
+        char *sl=strrchr(engname,
+#ifdef _WIN32
+        '\\'
+#else
+        '/'
+#endif
+        ); if(sl) memmove(engname,sl+1,strlen(sl));
+        snprintf(di,sizeof(di),"%s",engname);
+        int maxch=(int)((sw-60)/(9*UI_TEXT_SCALE)); if(maxch<8)maxch=8;
+        if((int)strlen(di)>maxch){di[maxch-3]=0;strcat(di,"...");}
+        int ecol=(show_uci&&uci_eng[show_ei].ready)?220:160;
+        dtxt(FRAME_W+8+50,sy+4,di,1,ecol,ecol,ecol);
+        int is_ponder_on=use_ponder; int is_th=ai_thinking||ponder_running||uci_ponder_alive||uci_ponder_waiting;
+        if(is_ponder_on&&is_th){ int blink=(SDL_GetTicks()/400)%2; if(blink) fcircle(FRAME_W+4+sw-26,sy+8,4,255,165,0); else fcircle(FRAME_W+4+sw-26,sy+8,4,60,40,0); }
+        else fcircle(FRAME_W+4+sw-26,sy+8,3,70,70,70);
+    }
+    int evfl = flip_board ^ (player_color==BLACK ? 1 : 0);
+    int disp_ev = evfl ? -g_best_eval : g_best_eval;
+    int ev=g_best_eval; if(ev>1500)ev=1500; if(ev<-1500)ev=-1500; if(evfl) ev=-ev;
+    double frac=0.5+ev/3000.0; if(frac<0)frac=0; if(frac>1)frac=1;
+    int bh=dyn_panel_h-28, bw=28;
+    int bar_x=FRAME_W+8, bar_y=sy+18;
+    {
+      int bottom_h=(int)(frac*bh); int top_h=bh-bottom_h; int split=top_h;
+      int bottom_is_white=!evfl;
+      int tR,tG,tB,bR,bG,bB;
+      if(bottom_is_white){ tR=40; tG=60; tB=95; bR=255; bG=165; bB=0; } else { tR=255; tG=165; tB=0; bR=40; bG=60; bB=95; }
+      if(top_h>0) frect(bar_x,bar_y,bw,top_h,tR,tG,tB);
+      if(bottom_h>0) frect(bar_x,bar_y+top_h,bw,bottom_h,bR,bG,bB);
+      for(int t=1;t<4;t++){ int ty=bar_y+bh*t/4; SDL_SetRenderDrawColor(ren,0,0,0,90); SDL_RenderDrawLine(ren,bar_x,ty,bar_x+bw,ty); }
+      if(split>0&&split<bh){ SDL_SetRenderDrawColor(ren,0,0,0,255); SDL_RenderDrawLine(ren,bar_x,bar_y+split,bar_x+bw,bar_y+split); SDL_SetRenderDrawColor(ren,255,255,255,180); SDL_RenderDrawLine(ren,bar_x,bar_y+split+1,bar_x+bw,bar_y+split+1); }
+      orect(bar_x,bar_y,bw,bh,80,80,80);
+    }
+    {
+        char evb[16]; if(disp_ev>9000) strcpy(evb,"M+"); else if(disp_ev<-9000) strcpy(evb,"M-"); else sprintf(evb,"%+.1f",disp_ev/100.0);
+        int evcol=disp_ev>=0?255:100, evG=disp_ev>=0?165:160, evB=disp_ev>=0?0:255;
+        dtxt(bar_x+bw+6, bar_y+bh/2-4, evb,1,evcol,evG,evB);
+        int spx=bar_x+bw+48, spw=(sw-8) - (bw+56); if(spw<60) spw=60;
+        draw_eval_sparkline(spx, bar_y, spw, bh);
+    }
+}
+
+static void draw_sidebar(int mx,int my){
     int sw=real_w>FRAME_W?real_w-FRAME_W:SIDE_W;
     int sh=real_h>MENU_H?real_h-MENU_H-LOG_H:WIN_H-MENU_H-LOG_H;
     if(sh<260) sh=260;
@@ -2776,9 +2908,11 @@ static void draw_sidebar(void){
     }
     int has_tourney = (tourney_active||tourney_played>0)?1:0;
     int num_uniform = 3 + num_eng_tmp + has_tourney; // CAPTURED + EVAL + MOVES + engines + tourney
+    // v14: reserve space for FEN panel (fixed height) so uniform panels fill remaining
+    const int FEN_H = 38;
     // top margin (8) + bottom ponder bar (24) + its own margin (8) + one 6px
-    // gap drawn after every panel (including the last one before the bar)
-    int avail_h = sh - 8 - 32 - num_uniform*6;
+    // gap drawn after every panel (including the last one before the bar) + FEN gap
+    int avail_h = sh - 8 - 32 - num_uniform*6 - FEN_H - 6;
     int dyn_panel_h = avail_h / (num_uniform>0?num_uniform:1);
     if(dyn_panel_h<90) dyn_panel_h=90;   /* CAPTURED needs ~90 for 2 rows of pieces */
     if(dyn_panel_h>220) dyn_panel_h=220; /* keep panels sane on very tall windows */
@@ -2829,60 +2963,6 @@ static void draw_sidebar(void){
         sy+=dyn_panel_h+6;
     }
 
-    // Uniform EVAL panel — fixed overlap, fills width
-    frect(FRAME_W+4,sy,sw-8,dyn_panel_h,0,0,0);
-    orect(FRAME_W+4,sy,sw-8,dyn_panel_h,70,70,70);
-    dtxt(FRAME_W+9,sy+5,"EVAL",1,0,0,0);
-    dtxt(FRAME_W+8,sy+4,"EVAL",1,255,165,0);
-    {
-        char di[64]; char engname[64];
-        int show_uci = use_uci_engine; int show_ei=active_engine;
-        if(tourney_active||aivsai){ int tp=(turn==WHITE)?tourney_player[0]:tourney_player[1]; if(tp==1){show_uci=1;show_ei=0;} else if(tp==2){show_uci=1;show_ei=1;} else show_uci=0; }
-        strncpy(engname, show_uci?uci_eng[show_ei].path:"StrongEngine",63);
-        char *sl=strrchr(engname,
-#ifdef _WIN32
-        '\\'
-#else
-        '/'
-#endif
-        ); if(sl) memmove(engname,sl+1,strlen(sl));
-        snprintf(di,sizeof(di),"%s",engname);
-        int maxch=(sw-60)/9; if(maxch<8)maxch=8;
-        if((int)strlen(di)>maxch){di[maxch-3]=0;strcat(di,"...");}
-        int ecol=(show_uci&&uci_eng[show_ei].ready)?220:160;
-        dtxt(FRAME_W+8+50,sy+4,di,1,ecol,ecol,ecol);
-        // ponder dot in this panel
-        int is_ponder_on=use_ponder; int is_th=ai_thinking||ponder_running||uci_ponder_alive||uci_ponder_waiting;
-        if(is_ponder_on&&is_th){ int blink=(SDL_GetTicks()/400)%2; if(blink) fcircle(FRAME_W+4+sw-26,sy+8,4,255,165,0); else fcircle(FRAME_W+4+sw-26,sy+8,4,60,40,0); }
-        else fcircle(FRAME_W+4+sw-26,sy+8,3,70,70,70);
-    }
-    int evfl = flip_board ^ (player_color==BLACK ? 1 : 0);
-    int disp_ev = evfl ? -g_best_eval : g_best_eval;
-    int ev=g_best_eval; if(ev>1500)ev=1500; if(ev<-1500)ev=-1500; if(evfl) ev=-ev;
-    double frac=0.5+ev/3000.0; if(frac<0)frac=0; if(frac>1)frac=1;
-    int bh=dyn_panel_h-28, bw=28;
-    int bar_x=FRAME_W+8, bar_y=sy+18;
-    {
-      int bottom_h=(int)(frac*bh); int top_h=bh-bottom_h; int split=top_h;
-      int bottom_is_white=!evfl;
-      int tR,tG,tB,bR,bG,bB;
-      if(bottom_is_white){ tR=40; tG=60; tB=95; bR=255; bG=165; bB=0; } else { tR=255; tG=165; tB=0; bR=40; bG=60; bB=95; }
-      if(top_h>0) frect(bar_x,bar_y,bw,top_h,tR,tG,tB);
-      if(bottom_h>0) frect(bar_x,bar_y+top_h,bw,bottom_h,bR,bG,bB);
-      for(int t=1;t<4;t++){ int ty=bar_y+bh*t/4; SDL_SetRenderDrawColor(ren,0,0,0,90); SDL_RenderDrawLine(ren,bar_x,ty,bar_x+bw,ty); }
-      if(split>0&&split<bh){ SDL_SetRenderDrawColor(ren,0,0,0,255); SDL_RenderDrawLine(ren,bar_x,bar_y+split,bar_x+bw,bar_y+split); SDL_SetRenderDrawColor(ren,255,255,255,180); SDL_RenderDrawLine(ren,bar_x,bar_y+split+1,bar_x+bw,bar_y+split+1); }
-      orect(bar_x,bar_y,bw,bh,80,80,80);
-    }
-    {
-        char evb[16]; if(disp_ev>9000) strcpy(evb,"M+"); else if(disp_ev<-9000) strcpy(evb,"M-"); else sprintf(evb,"%+.1f",disp_ev/100.0);
-        int evcol=disp_ev>=0?255:100, evG=disp_ev>=0?165:160, evB=disp_ev>=0?0:255;
-        dtxt(bar_x+bw+6, bar_y+bh/2-4, evb,1,evcol,evG,evB);
-        /* FIX: start the sparkline AFTER the eval text (max ~36px wide) so
-           the last digit no longer overlaps the graph. */
-        int spx=bar_x+bw+48, spw=(sw-8) - (bw+56); if(spw<60) spw=60;
-        draw_eval_sparkline(spx, bar_y, spw, bh);
-    }
-    sy+=dyn_panel_h+6;
     /* v13: Per-engine analysis panels with names — separate for each engine */
     {
         int panel_w=sw-8; if(panel_w<180)panel_w=180;
@@ -2917,6 +2997,7 @@ static void draw_sidebar(void){
             if(uci_eng[1].ready||eng_analysis[1].has_data){ panel_slot[npan]=1; panel_side[npan]=-1; npan++; }
         }
         int per_h = dyn_panel_h; /* uniform, fills the sidebar together with the other panels */
+        int evfl = flip_board ^ (player_color==BLACK ? 1 : 0);
         int on_move_slot = -1; /* used in NORMAL mode; in aivsai/tourney on_move_side drives the highlight */
         if(tourney_active || aivsai){
             int tp = (turn==WHITE) ? tourney_player[0] : tourney_player[1];
@@ -2955,7 +3036,7 @@ static void draw_sidebar(void){
             char hdr[120];
             const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
             snprintf(hdr,sizeof(hdr),"%s%s", side_lbl, ename);
-            int maxch=(panel_w-16)/9; if((int)strlen(hdr)>maxch){ hdr[maxch-3]=0; strcat(hdr,"..."); }
+            int maxch=(int)((panel_w-16)/(9*UI_TEXT_SCALE)); if((int)strlen(hdr)>maxch){ hdr[maxch-3]=0; strcat(hdr,"..."); }
             dtxt(FRAME_W+9, sy+5, hdr, 1, 0,0,0);
             dtxt(FRAME_W+8, sy+4, hdr, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
             /* thinking indicator — colored dot per side (green for White, blue
@@ -2992,7 +3073,7 @@ static void draw_sidebar(void){
             if(pvsrc[0]){
                 int pv_avail=panel_w-20;
                 if(pv_avail<60) pv_avail=60;
-                int max_ch=pv_avail/9;
+                int max_ch=(int)(pv_avail/(9*UI_TEXT_SCALE));
                 if(max_ch<10) max_ch=10; if(max_ch>180) max_ch=180;
                 char pv_display[200];
                 int pvlen=(int)strlen(pvsrc);
@@ -3025,6 +3106,14 @@ static void draw_sidebar(void){
                 dtxt(FRAME_W+10, sy+30, "(no analysis yet)", 1, 110,110,120);
             }
             sy+=per_h+6;
+            if(pi==0){
+                draw_eval_panel_v14(sy, sw, dyn_panel_h);
+                sy+=dyn_panel_h+6;
+            }
+        }
+        if(npan==0){
+            draw_eval_panel_v14(sy, sw, dyn_panel_h);
+            sy+=dyn_panel_h+6;
         }
     }
     // Uniform MOVES panel — same width/height as the other sidebar panels
@@ -3036,7 +3125,7 @@ static void draw_sidebar(void){
         const char *opn=current_opening_name();
         if(opn[0]){
             char ob[64]; snprintf(ob,sizeof(ob),"%s",opn);
-            int maxch=(moves_w-76)/9; if(maxch<10)maxch=10;
+            int maxch=(int)((moves_w-76)/(9*UI_TEXT_SCALE)); if(maxch<10)maxch=10;
             if((int)strlen(ob)>maxch){ob[maxch-3]=0;strcat(ob,"...");}
             dtxt(FRAME_W+8+56,sy+4,ob,1,130,130,130);
         }
@@ -3064,7 +3153,7 @@ static void draw_sidebar(void){
         int cx=FRAME_W+8, lines=1;
         for(int i=start;i<hist_n;i++){
             char tok[20]; MV_TOKEN(i,tok);
-            int tw=(int)strlen(tok)*9+8;
+            int tw=(int)(int)(strlen(tok)*9*UI_TEXT_SCALE+8*UI_TEXT_SCALE);
             if(cx+tw>right_edge){cx=FRAME_W+8;lines++;}
             cx+=tw;
         }
@@ -3074,7 +3163,7 @@ static void draw_sidebar(void){
     int cur_y=panel_inner_y;
     for(int i=start;i<hist_n;i++){
         char tok[20]; MV_TOKEN(i,tok);
-        int tw=(int)strlen(tok)*9+8;
+        int tw=(int)(int)(strlen(tok)*9*UI_TEXT_SCALE+8*UI_TEXT_SCALE);
         if(cx+tw>right_edge){ cx=FRAME_W+8; cur_y+=line_h; if(cur_y+line_h > sy+dyn_panel_h) break; }
         int R2=170,G2=170,B2=170;if(i==hist_n-1){R2=255;G2=165;B2=0;}
         dtxt(cx,cur_y,tok,1,R2,G2,B2);
@@ -3082,6 +3171,35 @@ static void draw_sidebar(void){
     }
     sy+=dyn_panel_h+6;
     #undef MV_TOKEN
+
+    // v14: FEN panel — dynamic, click to copy (between MOVES and PONDER)
+    {
+        update_cached_fen();
+        int fx=FRAME_W+4, fy=sy, fw=sw-8, fh=FEN_H;
+        fen_panel_x=fx; fen_panel_y=fy; fen_panel_w=fw; fen_panel_h=fh;
+        frect(fx,fy,fw,fh,0,0,0);
+        int is_hover = (mx>=fx && mx<fx+fw && my>=fy && my<fy+fh);
+        orect(fx,fy,fw,fh, is_hover?255:70, is_hover?165:70, is_hover?0:70);
+        dtxt(fx+6,fy+4,"FEN",1,255,165,0);
+        dtxt(fx+6+ (int)(3*9*UI_TEXT_SCALE),fy+4,"(click to copy)",1,90,90,90);
+        const char *copy_lbl="[Copy]";
+        int copy_w=(int)(strlen(copy_lbl)*9*UI_TEXT_SCALE + 6);
+        int copy_x=fx+fw-copy_w-6, copy_y=fy+4;
+        int copy_hover = (mx>=copy_x && mx<copy_x+copy_w && my>=copy_y && my<copy_y+ (int)(12*UI_TEXT_SCALE));
+        dtxt(copy_x, copy_y, copy_lbl,1, copy_hover?255:180, copy_hover?255:200, copy_hover?255:180);
+        char fen_disp[256];
+        int avail_w = fw - 12;
+        int maxch = (int)(avail_w / (9*UI_TEXT_SCALE));
+        if(maxch<10) maxch=10;
+        if(maxch> (int)sizeof(fen_disp)-1) maxch=sizeof(fen_disp)-1;
+        strncpy(fen_disp, cached_fen, maxch);
+        fen_disp[maxch]=0;
+        if((int)strlen(cached_fen) > maxch){
+            if(maxch>=3){ fen_disp[maxch-3]='.'; fen_disp[maxch-2]='.'; fen_disp[maxch-1]='.'; }
+        }
+        dtxt(fx+6, fy+18, fen_disp,1, is_hover?255:200, is_hover?255:200, is_hover?255:200);
+        sy+=fh+6;
+    }
     /* v13: Enhanced ponder status indicator at bottom — clearly shows ON/OFF + RUNNING */
     {
         int ponder_any = ponder_running || uci_ponder_alive || uci_ponder_waiting;
@@ -3095,13 +3213,13 @@ static void draw_sidebar(void){
         if(!use_ponder){
             snprintf(pbuf,sizeof(pbuf),"PONDER OFF");
             dtxt(bx+8, by+7, pbuf, 1, 200,200,200);
-            dtxt(bx+8 + (int)strlen(pbuf)*9 + 8, by+7, "(Settings)", 1, 110,110,110);
+            dtxt(bx+8 + (int)(strlen(pbuf)*9*UI_TEXT_SCALE) + 8, by+7, "(Settings)", 1, 110,110,110);
         } else if(ponder_any){
             int blink = (SDL_GetTicks()/350)%2;
             snprintf(pbuf,sizeof(pbuf),"PONDER ON %s d%d", blink?"[*]":"[ ]", g_best_depth);
             dtxt(bx+8, by+7, pbuf, 1, 255,180,40);
-            if(uci_ponder_alive) dtxt(bx+8+ (int)strlen(pbuf)*9, by+7, " UCI", 1, 255,200,80);
-            else if(ponder_running) dtxt(bx+8+ (int)strlen(pbuf)*9, by+7, " CPU", 1, 200,200,200);
+            if(uci_ponder_alive) dtxt(bx+8+ (int)(strlen(pbuf)*9*UI_TEXT_SCALE), by+7, " UCI", 1, 255,200,80);
+            else if(ponder_running) dtxt(bx+8+ (int)(strlen(pbuf)*9*UI_TEXT_SCALE), by+7, " CPU", 1, 200,200,200);
         } else {
             snprintf(pbuf,sizeof(pbuf),"PONDER ON [IDLE]");
             dtxt(bx+8, by+7, pbuf, 1, 180,160,120);
@@ -3308,7 +3426,7 @@ static void render(int mx,int my){
         sq2px(arrow_fr,arrow_fc,&px1,&py1);
         draw_arrow(px1+SQ_SIZE/2,py1+SQ_SIZE/2,arrow_mx,arrow_my,0,160,70,140);
     }
-    draw_sidebar();
+    draw_sidebar(mx,my);
     draw_bottom_log();
     if(retro_scanlines || retro_vignette || retro_crt_curve) draw_retro_overlays();
     draw_menus(mx,my);
@@ -5123,7 +5241,7 @@ static void draw_uci_options_dialog(void){
                 case UOPT_STRING:snprintf(buf,sizeof(buf),"%s: %s",o->name,o->cur_str); break;
                 case UOPT_BUTTON:snprintf(buf,sizeof(buf),"%s  [click to send]",o->name); break;
             }
-            int maxch=(dw-24)/9; if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
+            int maxch=(int)((dw-24)/(9*UI_TEXT_SCALE)); if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
             int R=210,G=210,B=225;
             if(o->type==UOPT_BUTTON){R=220;G=190;B=120;}
             else if(o->type==UOPT_SPIN){R=170;G=210;B=230;}
@@ -5308,6 +5426,9 @@ int main(void){
                 }
                 /* v13: C = copy the on-screen log to the clipboard */
                 if(k==SDLK_c && !ctrl) copy_log_to_clipboard();
+                /* v14: Ctrl+C = copy FEN, Y = copy FEN */
+                if(ctrl && k==SDLK_c) copy_fen_to_clipboard();
+                if(k==SDLK_y && !ctrl) copy_fen_to_clipboard();
                 skip_normal_keys:;
             }
             /* v9: text input for FEN and path dialogs */
@@ -5360,6 +5481,14 @@ int main(void){
                             int tx=8+t*(tab_w+6);
                             if(mx>=tx && mx<tx+tab_w){ bottom_log_tab=t; char tmsg[48]; snprintf(tmsg,sizeof(tmsg),"TAB -> %s", t==0?"Out1":t==1?"Out2":"Log"); bottom_log_push(tmsg); goto skip; }
                         }
+                    }
+                }
+                // v14: FEN panel click to copy (sidebar)
+                {
+                    int mx=e.button.x, my=e.button.y;
+                    if(mx>=fen_panel_x && mx<fen_panel_x+fen_panel_w && my>=fen_panel_y && my<fen_panel_y+fen_panel_h && fen_panel_w>0){
+                        copy_fen_to_clipboard();
+                        goto skip;
                     }
                 }
                 if(uci_opts_dialog_active){
