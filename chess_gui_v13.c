@@ -3351,11 +3351,15 @@ static void draw_bottom_log(void){
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
         int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_engine(bottom_log_lines[i])==-1) cnt++;
         int show_n = cnt<max_lines ? cnt : max_lines;
+        int box_w = rw - COORD_W - 8;
+        int maxch = (box_w - 12)/9; if(maxch<20) maxch=20; if(maxch>120) maxch=120;
         int drawn=0;
         for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
             char *ln = bottom_log_lines[i];
             if(!ln[0] || bottom_log_engine(ln)!=-1) continue;
-            dtxt_raw(COORD_W+4, ly+4+(show_n-1-drawn)*line_h, ln,1, 180,180,180);
+            char disp[140]; strncpy(disp, ln, sizeof(disp)-1); disp[sizeof(disp)-1]=0;
+            if((int)strlen(disp) > maxch){ disp[maxch-3]=0; strcat(disp,"..."); }
+            dtxt_raw(COORD_W+4, ly+4+(show_n-1-drawn)*line_h, disp,1, 180,180,180);
             drawn++;
         }
         if(cnt==0) dtxt_raw(COORD_W+4, ly+4, "(log empty — engine and game messages will appear here)",1, 110,110,110);
@@ -3374,6 +3378,8 @@ static void draw_bottom_log(void){
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
         int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_engine(bottom_log_lines[i])==out_ei) cnt++;
         int show_n = cnt<max_lines ? cnt : max_lines;
+        int box_w2 = rw - COORD_W - 8;
+        int maxch2 = (box_w2 - 12)/9; if(maxch2<20) maxch2=20; if(maxch2>120) maxch2=120;
         int drawn=0;
         for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
             char *ln = bottom_log_lines[i];
@@ -3382,7 +3388,9 @@ static void draw_bottom_log(void){
             if(strstr(ln,"[SEND")){ colR=150;colG=200;colB=255; }
             else if(strstr(ln,"[RECV")){ colR=255;colG=210;colB=150; }
             else if(strstr(ln,"[ENGINE")){ colR=255;colG=160;colB=120; }
-            dtxt_raw(COORD_W+4, ly+4+(show_n-1-drawn)*line_h, ln,1, colR,colG,colB);
+            char disp2[140]; strncpy(disp2, ln, sizeof(disp2)-1); disp2[sizeof(disp2)-1]=0;
+            if((int)strlen(disp2) > maxch2){ disp2[maxch2-3]=0; strcat(disp2,"..."); }
+            dtxt_raw(COORD_W+4, ly+4+(show_n-1-drawn)*line_h, disp2,1, colR,colG,colB);
             drawn++;
         }
         if(cnt==0) dtxt_raw(COORD_W+4, ly+4, bottom_log_tab==0? "(no Engine 1 (E1) output yet)":"(no Engine 2 (E2) output yet)",1, 110,110,110);
