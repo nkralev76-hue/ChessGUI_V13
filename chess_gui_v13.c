@@ -3410,8 +3410,9 @@ static void render(int mx,int my){
     {
         int cw = 22*4+26; /* clock width from draw_clock */
         int cy = fy + (CLOCK_BAR_H-30)/2 + 4;
-        int wx = fx + fw/2 - cw - 40;
-        int bx = fx + fw/2 + 40;
+        int board_cx = BOARD_OX + BRD/2;
+        int wx = board_cx - cw - 20;
+        int bx = board_cx + 20;
         if(wx < fx+8) wx = fx+8;
         if(bx + cw > fx+fw-8) bx = fx+fw-8 - cw;
         dtxt_raw(wx-2, cy-12, "W",1, 180,180,180);
