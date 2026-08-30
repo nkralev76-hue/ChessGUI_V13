@@ -5432,7 +5432,6 @@ static void draw_uci_options_dialog(void){
             else if(o->type==UOPT_COMBO){ strcpy(icon,">"); icR=180; icG=180; icB=220; }
             else if(o->type==UOPT_STRING){ strcpy(icon,"T"); icR=200; icG=220; icB=180; }
             else if(o->type==UOPT_BUTTON){ strcpy(icon,">>"); icR=255; icG=200; icB=80; }
-            dtxt_raw(dx+12,ry+8,icon,1,icR,icG,icB);
             char buf[220];
             switch(o->type){
                 case UOPT_CHECK: snprintf(buf,sizeof(buf),"%s",o->name); break;
@@ -5441,12 +5440,26 @@ static void draw_uci_options_dialog(void){
                 case UOPT_STRING:snprintf(buf,sizeof(buf),"%s: %s",o->name,o->cur_str[0]?o->cur_str:"<empty>"); break;
                 case UOPT_BUTTON:snprintf(buf,sizeof(buf),"%s",o->name); break;
             }
-            int maxch=(dw-40)/9; if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
+            int maxch=(dw-54)/9; if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
             int R=220,G=220,B=230;
             if(o->type==UOPT_BUTTON){R=255;G=220;B=120;}
             else if(o->type==UOPT_SPIN){R=180;G=220;B=240;}
             else if(o->type==UOPT_CHECK && o->cur_check){R=255;G=235;B=180;}
-            dtxt_raw(dx+12,ry+9,buf,1,R,G,B);
+            // по-красива отметка — истинско квадратче, не текст [x] който се слива
+            if(o->type==UOPT_CHECK){
+                int cbx=dx+12, cby=ry+7, cbs=13;
+                orect(cbx,cby,cbs,cbs, 90,90,100);
+                if(o->cur_check){
+                    frect(cbx+2,cby+2,cbs-4,cbs-4, 255,165,0);
+                    orect(cbx+2,cby+2,cbs-4,cbs-4, 255,200,100);
+                } else {
+                    frect(cbx+2,cby+2,cbs-4,cbs-4, 30,30,35);
+                }
+                dtxt_raw(dx+32,ry+9,buf,1,R,G,B);
+            } else {
+                dtxt_raw(dx+12,ry+8,icon,1,icR,icG,icB);
+                dtxt_raw(dx+32,ry+9,buf,1,R,G,B);
+            }
         }
         /* scroll indicators */
         if(options_scroll>0) dtxt_raw(dx+dw-16,list_y-2,"^",1,180,180,220);
