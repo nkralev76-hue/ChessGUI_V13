@@ -1739,27 +1739,8 @@ static int parse_fen(const char *fen){
     if(strcmp(tok,"-")!=0&&strlen(tok)==2){
         int fc2=tok[0]-'a', fr2=tok[1]-'0'-1;
         if(fc2>=0&&fc2<8&&fr2>=0&&fr2<8){
-            /* Validate: the side to move must have a pawn that can capture en passant.
-               White captures on rank 5 (fr2==2), Black captures on rank 4 (fr2==3).
-               The adjacent file must have an enemy pawn that just double-pushed. */
-            int ep_valid = 0;
-            if(turn == WHITE && fr2 == 2) {
-                int ep_pawn_sq = (fr2+1)*8 + fc2; /* rank 3 = black pawn that pushed */
-                if(BB_GET(B.pieces[BC][BB_P], ep_pawn_sq)) {
-                    /* check if white has an adjacent pawn */
-                    if((fc2 > 0 && BB_GET(B.pieces[WC][BB_P], fr2*8+fc2-1)) ||
-                       (fc2 < 7 && BB_GET(B.pieces[WC][BB_P], fr2*8+fc2+1)))
-                        ep_valid = 1;
-                }
-            } else if(turn == BLACK && fr2 == 3) {
-                int ep_pawn_sq = (fr2-1)*8 + fc2; /* rank 4 = white pawn that pushed */
-                if(BB_GET(B.pieces[WC][BB_P], ep_pawn_sq)) {
-                    if((fc2 > 0 && BB_GET(B.pieces[BC][BB_P], fr2*8+fc2-1)) ||
-                       (fc2 < 7 && BB_GET(B.pieces[BC][BB_P], fr2*8+fc2+1)))
-                        ep_valid = 1;
-                }
-            }
-            if(ep_valid) B.ep = fc2;
+            // Accept en passant square as given in FEN (more lenient)
+            B.ep = fc2;
         }
     }
     /* 5) Halfmove clock (optional) */
@@ -5587,19 +5568,32 @@ int main(void){
                     }
                     if(k==SDLK_ESCAPE){fen_dialog_active=0;SDL_StopTextInput();}
                     else if(k==SDLK_RETURN||k==SDLK_KP_ENTER){
-                        if(fen_dialog_len>10){
+                        // Trim leading/trailing whitespace from paste
+                        char tmp[256]; strncpy(tmp,fen_dialog_buf,255); tmp[255]=0;
+                        // trim
+                        int tlen=strlen(tmp); while(tlen>0 && (tmp[tlen-1]=='\n' || tmp[tlen-1]=='\r' || tmp[tlen-1]==' ' || tmp[tlen-1]=='\t')) tmp[--tlen]=0;
+                        char *tstart=tmp; while(*tstart==' '||*tstart=='\t') tstart++;
+                        if(strlen(tstart)>10){
                             stop_analysis();stop_pondering();stop_ai();
-                            char tmp[256];strncpy(tmp,fen_dialog_buf,255);
-                            if(parse_fen(tmp)){
-                                strncpy(game_start_fen,tmp,255);
+                            if(parse_fen(tstart)){
+                                strncpy(game_start_fen,tstart,255);
                                 hist_n=0;game_hist_n=0;
                                 if(game_hist_n<MAX_GAME_HIST)game_hist_hashes[game_hist_n++]=B.hash;
-                                clk_w=clk_b=base_time;last_ms=SDL_GetTicks();clock_started=0; /* v12.9 */
+                                clk_w=clk_b=base_time;last_ms=SDL_GetTicks();clock_started=0;
                                 lm_fr=lm_fc=lm_tr=lm_tc=-1;
                                 promo_pending=0;memset(cap_w,0,sizeof cap_w);memset(cap_b,0,sizeof cap_b);
                                 sel_r=sel_c=-1;game_over=0;draw_offered=0;
                                 strcpy(msg,"FEN loaded");
-                            } else {strcpy(msg,"Invalid FEN!");}
+                                char log2[300]; snprintf(log2,sizeof(log2),"FEN OK: %s", tstart);
+                                bottom_log_push(log2);
+                            } else {
+                                strcpy(msg,"Invalid FEN!");
+                                char log3[300]; snprintf(log3,sizeof(log3),"FEN FAIL: '%s' len=%d", tstart, (int)strlen(tstart));
+                                bottom_log_push(log3);
+                            }
+                        } else {
+                            strcpy(msg,"FEN too short!");
+                            bottom_log_push("FEN too short - paste a full FEN");
                         }
                         fen_dialog_active=0;SDL_StopTextInput();
                     }
