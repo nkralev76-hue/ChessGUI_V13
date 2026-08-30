@@ -1957,6 +1957,13 @@ static void dtxt(int x,int y,const char*t,int sc,int R,int Gv,int B){
             }
     }
 }
+static void dtxt_raw(int x,int y,const char*t,int sc,int R,int Gv,int B){
+    SDL_SetRenderDrawColor(ren,R,Gv,B,255);
+    for(int ci=0;t[ci];ci++){unsigned char ch=(unsigned char)t[ci];if(ch>127)continue;
+        for(int row=0;row<9;row++)for(int bit=0;bit<8;bit++)
+            if(PF[ch][row]&(0x80>>bit)){SDL_Rect px={x+ci*(8*sc+sc)+bit*sc,y+row*sc,sc,sc};SDL_RenderFillRect(ren,&px);}
+    }
+}
 static void sq2px(int r,int c,int*px,int*py){
     int fl=flip_board^(player_color==BLACK?1:0);
     *px=BOARD_OX+(fl?7-c:c)*SQ_SIZE;
@@ -2157,7 +2164,7 @@ static const char*menu_item(int mi,int ii){
 static void draw_menus(int mx,int my){
     frect(0,0,WIN_W,MENU_H,0,0,0);
     SDL_SetRenderDrawColor(ren,80,80,80,255);SDL_RenderDrawLine(ren,0,MENU_H-1,WIN_W,MENU_H-1);
-    if(!ai_thinking){int tw=(int)(strlen(msg)*9*UI_TEXT_SCALE);if(tw<WIN_W-200)dtxt(WIN_W-tw-4,14,msg,1,130,130,160);}
+    if(!ai_thinking){int tw=(int)(strlen(msg)*9*UI_TEXT_SCALE);if(tw<WIN_W-200)dtxt_raw(WIN_W-tw-4,14,msg,1,130,130,160);}
     int mw=90,mx0=4,gap=4;
     for(int mi=0;mi<N_MENUS;mi++){
         int bx=mx0+mi*(mw+gap),by=3,bh=MENU_H-6;
@@ -2166,7 +2173,7 @@ static void draw_menus(int mx,int my){
         if(act) orect(bx,by,mw,bh,255,165,0);
         else if(hov) orect(bx,by,mw,bh,90,90,90);
         int tw=(int)(strlen(MNAME[mi])*9*UI_TEXT_SCALE+9*UI_TEXT_SCALE);
-        dtxt(bx+(mw-tw)/2,by+11,MNAME[mi],1,act?255:(hov?240:210),act?255:(hov?255:230),act?255:(hov?240:210));
+        dtxt_raw(bx+(mw-tw)/2,by+11,MNAME[mi],1,act?255:(hov?240:210),act?255:(hov?255:230),act?255:(hov?240:210));
         if(open_menu==mi){
             int n=menu_count(mi),ih=26,iw=(mi==5)?320:220,ix=bx,iy=MENU_H;
             if(ix+iw>WIN_W)ix=WIN_W-iw-2;
@@ -2181,7 +2188,7 @@ static void draw_menus(int mx,int my){
                 if(is_sep){
                     SDL_SetRenderDrawColor(ren,60,60,90,255);
                     SDL_RenderDrawLine(ren,ix+4,iy2+ih/2,ix+iw-4,iy2+ih/2);
-                    dtxt(ix+8,iy2+4,menu_item(mi,ii),1,80,80,120);
+                    dtxt_raw(ix+8,iy2+4,menu_item(mi,ii),1,80,80,120);
                     continue;
                 }
                 int hovi=(mx>=ix&&mx<ix+iw&&my>=iy2&&my<iy2+ih);
@@ -2224,7 +2231,7 @@ static void draw_menus(int mx,int my){
                     if(ii==14&&tourney_player[1]==3)mk=1;
                     if(ii==16&&tourney_active)mk=1;
                 }
-                if(mk)dtxt(ix+4,iy2+8,"*",1,100,220,100);
+                if(mk)dtxt_raw(ix+4,iy2+8,"*",1,100,220,100);
                 int txtx = ix+20;
                 /* v13: show a color swatch for theme entries so each theme is
                    displayed with its own color, grouped like the others */
@@ -2234,7 +2241,7 @@ static void draw_menus(int mx,int my){
                     orect(ix+16, iy2+7, 12,12, 120,120,120);
                     txtx = ix+32;
                 }
-                dtxt(txtx,iy2+8,menu_item(mi,ii),1,hovi?255:200,hovi?255:200,hovi?255:230);
+                dtxt_raw(txtx,iy2+8,menu_item(mi,ii),1,hovi?255:200,hovi?255:200,hovi?255:230);
             }
         }
     }
@@ -3243,9 +3250,9 @@ static void draw_bottom_log(void){
         frect(tx,ty,tab_w,tab_h, active?28:10, active?20:10, active?0:10);
         if(active) orect(tx,ty,tab_w,tab_h,255,165,0); else orect(tx,ty,tab_w,tab_h,60,60,60);
         const char *lab = t==0?"Out1": t==1?"Out2": "Log";
-        dtxt(tx+12, ty+4, lab,1, active?255:150, active?165:150, active?0:150);
+        dtxt_raw(tx+12, ty+4, lab,1, active?255:150, active?165:150, active?0:150);
     }
-    dtxt(rw-170, y0+4, "per-engine UCI output",1, 90,90,90);
+    dtxt_raw(rw-170, y0+4, "per-engine UCI output",1, 90,90,90);
     if(bottom_log_tab==2){
         // LOG tab — game/status messages only (engine traffic lives in Out1/Out2;
         // moves are shown in the MOVES panel, not here).
@@ -3261,10 +3268,10 @@ static void draw_bottom_log(void){
         for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
             char *ln = bottom_log_lines[i];
             if(!ln[0] || bottom_log_engine(ln)!=-1) continue;
-            dtxt(12, ly+4+(show_n-1-drawn)*line_h, ln,1, 180,180,180);
+            dtxt_raw(12, ly+4+(show_n-1-drawn)*line_h, ln,1, 180,180,180);
             drawn++;
         }
-        if(cnt==0) dtxt(12, ly+4, "(log empty — engine and game messages will appear here)",1, 110,110,110);
+        if(cnt==0) dtxt_raw(12, ly+4, "(log empty — engine and game messages will appear here)",1, 110,110,110);
         return;
     }
     /* v13: Out1 / Out2 tabs — raw UCI protocol for Engine 1 / Engine 2, like
@@ -3288,10 +3295,10 @@ static void draw_bottom_log(void){
             if(strstr(ln,"[SEND")){ colR=150;colG=200;colB=255; }
             else if(strstr(ln,"[RECV")){ colR=255;colG=210;colB=150; }
             else if(strstr(ln,"[ENGINE")){ colR=255;colG=160;colB=120; }
-            dtxt(12, ly+4+(show_n-1-drawn)*line_h, ln,1, colR,colG,colB);
+            dtxt_raw(12, ly+4+(show_n-1-drawn)*line_h, ln,1, colR,colG,colB);
             drawn++;
         }
-        if(cnt==0) dtxt(12, ly+4, bottom_log_tab==0? "(no Engine 1 (E1) output yet)":"(no Engine 2 (E2) output yet)",1, 110,110,110);
+        if(cnt==0) dtxt_raw(12, ly+4, bottom_log_tab==0? "(no Engine 1 (E1) output yet)":"(no Engine 2 (E2) output yet)",1, 110,110,110);
     }
 }
 
