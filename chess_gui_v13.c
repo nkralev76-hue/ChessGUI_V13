@@ -2175,7 +2175,7 @@ static void draw_menus(int mx,int my){
     frect(0,0,WIN_W,MENU_H,0,0,0);
     SDL_SetRenderDrawColor(ren,80,80,80,255);SDL_RenderDrawLine(ren,0,MENU_H-1,WIN_W,MENU_H-1);
     if(!ai_thinking){int tw=(int)(strlen(msg)*9*UI_TEXT_SCALE);if(tw<WIN_W-200)dtxt_raw(WIN_W-tw-4,14,msg,1,130,130,160);}
-    int mw=90,mx0=4,gap=4;
+    int mw=110,mx0=4,gap=4;
     for(int mi=0;mi<N_MENUS;mi++){
         int bx=mx0+mi*(mw+gap),by=3,bh=MENU_H-6;
         int hov=(mx>=bx&&mx<=bx+mw&&my>=by&&my<=by+bh),act=(open_menu==mi);
@@ -2338,7 +2338,7 @@ static int uci_engine_ponder_enabled(int ei){
 }
 
 static void handle_menu(int mx,int my){
-    int mw=90,mx0=4,gap=4;
+    int mw=110,mx0=4,gap=4;
     for(int mi=0;mi<N_MENUS;mi++){
         int bx=mx0+mi*(mw+gap);
         if(mx>=bx&&mx<=bx+mw&&my>=3&&my<=MENU_H-3){open_menu=(open_menu==mi)?-1:mi;return;}
