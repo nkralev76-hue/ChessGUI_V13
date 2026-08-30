@@ -2092,10 +2092,10 @@ static int promo_click(int mx,int my){
 static const char*MNAME[N_MENUS]={"Game","Settings","Engine","Tournament","Options","Help"};
 static const char*GITEMS[]={
     "New game (White)","New game (Black)","AI vs AI",
-    "Load FEN  (L)","Undo move (U)",
+    "Load FEN  (L)","Paste FEN (Ctrl+V)","Undo move (U)",
     "Draw offer","Resign","Save PGN"
 };
-#define N_GAME 8
+#define N_GAME 9
 static const char*SITEMS[]={
     "Sound on/off  (M)",
     "Flip board  (F)",
@@ -2395,10 +2395,28 @@ static void handle_menu(int mx,int my){
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"AI vs AI");}
                     else if(ii==3){open_menu=-1;fen_dialog_active=1;fen_dialog_buf[0]=0;fen_dialog_len=0;SDL_StartTextInput();}
-                    else if(ii==4){stop_pondering();if(!ai_thinking){do_undo();if(hist_n>0&&turn!=player_color)do_undo();}}
-                    else if(ii==5){draw_offered=1;sprintf(msg,"Draw offered");SDL_SetWindowTitle(win,msg);}
-                    else if(ii==6){game_over=1;strcpy(msg,player_color==WHITE?"You resign":"Computer wins");stop_analysis();stop_pondering();stop_ai();}
-                    else if(ii==7) save_pgn();
+                    else if(ii==4){
+                        char *clip = SDL_GetClipboardText();
+                        if(clip && strlen(clip)>10){
+                            char tmp[256]; strncpy(tmp,clip,255); tmp[255]=0;
+                            SDL_free(clip);
+                            stop_analysis();stop_pondering();stop_ai();
+                            if(parse_fen(tmp)){
+                                strncpy(game_start_fen,tmp,255);
+                                hist_n=0;game_hist_n=0;
+                                if(game_hist_n<MAX_GAME_HIST)game_hist_hashes[game_hist_n++]=B.hash;
+                                clk_w=clk_b=base_time;last_ms=SDL_GetTicks();clock_started=0;
+                                lm_fr=lm_fc=lm_tr=lm_tc=-1;
+                                promo_pending=0;memset(cap_w,0,sizeof cap_w);memset(cap_b,0,sizeof cap_b);
+                                sel_r=sel_c=-1;game_over=0;draw_offered=0;
+                                strcpy(msg,"FEN pasted");
+                            } else strcpy(msg,"Invalid FEN in clipboard!");
+                        } else { if(clip) SDL_free(clip); strcpy(msg,"Clipboard empty!"); }
+                    }
+                    else if(ii==5){stop_pondering();if(!ai_thinking){do_undo();if(hist_n>0&&turn!=player_color)do_undo();}}
+                    else if(ii==6){draw_offered=1;sprintf(msg,"Draw offered");SDL_SetWindowTitle(win,msg);}
+                    else if(ii==7){game_over=1;strcpy(msg,player_color==WHITE?"You resign":"Computer wins");stop_analysis();stop_pondering();stop_ai();}
+                    else if(ii==8) save_pgn();
                 }
                 if(mi==1){
                     if(ii==0)sound_on=!sound_on;
