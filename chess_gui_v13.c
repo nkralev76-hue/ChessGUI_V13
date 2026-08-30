@@ -3150,15 +3150,15 @@ static void draw_sidebar(int mx,int my){
                 if(pvlen>max_ch) pvlen=max_ch;
                 strncpy(pv_display,pvsrc,pvlen); pv_display[pvlen]=0;
                 // CMD bold PV — shadow + bright
-                dtxt(FRAME_W+11, sy+31, pv_display, 1, 30,30,30);
-                dtxt(FRAME_W+10, sy+30, pv_display, 1, 232,232,232);
+                dtxt(FRAME_W+11, sy+38, pv_display, 1, 30,30,30);
+                dtxt(FRAME_W+10, sy+37, pv_display, 1, 232,232,232);
                 if((int)strlen(pvsrc)>max_ch && per_h>78){
                     int pv2_start=max_ch;
                     int pv2_len=(int)strlen(pvsrc)-pv2_start;
                     if(pv2_len>max_ch) pv2_len=max_ch;
                     strncpy(pv_display,pvsrc+pv2_start,pv2_len); pv_display[pv2_len]=0;
-                    dtxt(FRAME_W+11, sy+43, pv_display, 1, 20,20,20);
-                    dtxt(FRAME_W+10, sy+42, pv_display, 1, 170,170,170);
+                    dtxt(FRAME_W+11, sy+52, pv_display, 1, 20,20,20);
+                    dtxt(FRAME_W+10, sy+51, pv_display, 1, 170,170,170);
                 }
                 /* nodes on last line */
                 char nbuf[64];
