@@ -3214,14 +3214,14 @@ static void draw_sidebar(int mx,int my){
     int moves_w=sw-8;
     frect(FRAME_W+4,sy,moves_w,dyn_panel_h,0,0,0);
     orect(FRAME_W+4,sy,moves_w,dyn_panel_h,60,60,60);
-    dtxt(FRAME_W+8,sy+4,"MOVES",1,255,165,0);
+    dtxt(FRAME_W+8,sy+4,"MOVES",1,100,180,220);
     {
         const char *opn=current_opening_name();
         if(opn[0]){
             char ob[64]; snprintf(ob,sizeof(ob),"%s",opn);
-            int maxch=(int)((moves_w-76)/(9*UI_TEXT_SCALE)); if(maxch<10)maxch=10;
+            int maxch=(int)((moves_w-90)/(9*UI_TEXT_SCALE)); if(maxch<10)maxch=10;
             if((int)strlen(ob)>maxch){ob[maxch-3]=0;strcat(ob,"...");}
-            dtxt(FRAME_W+8+56,sy+4,ob,1,130,130,130);
+            dtxt(FRAME_W+8+70,sy+4,ob,1,255,220,120);
         }
     }
     static const char*PCL[7]={"","","N","B","R","Q","K"};
