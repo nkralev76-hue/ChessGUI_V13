@@ -3015,9 +3015,9 @@ static void draw_sidebar(int mx,int my){
     /* Tournament scoreboard — uniform */
     if(tourney_active||tourney_played>0){
         frect(FRAME_W+4,sy,sw-8,dyn_panel_h,0,0,0);
-        orect(FRAME_W+4,sy,sw-8,dyn_panel_h,255,165,0);
+        orect(FRAME_W+4,sy,sw-8,dyn_panel_h,100,180,220);
         dtxt(FRAME_W+9,sy+7,"TOURNAMENT",1,0,0,0);
-        dtxt(FRAME_W+8,sy+6,"TOURNAMENT",1,255,165,0);
+        dtxt(FRAME_W+8,sy+6,"TOURNAMENT",1,100,180,220);
         if(tourney_is_rr){
             char ts[64];
             snprintf(ts,sizeof(ts),"RR G%d/%d", tourney_played+1, tourney_total);
@@ -3410,8 +3410,8 @@ static void render(int mx,int my){
     {
         int cw = 22*4+26; /* clock width from draw_clock */
         int cy = fy + (CLOCK_BAR_H-30)/2 + 4;
-        int wx = fx + fw/2 - cw - 24;
-        int bx = fx + fw/2 + 24;
+        int wx = fx + fw/2 - cw - 40;
+        int bx = fx + fw/2 + 40;
         if(wx < fx+8) wx = fx+8;
         if(bx + cw > fx+fw-8) bx = fx+fw-8 - cw;
         dtxt_raw(wx-2, cy-12, "W",1, 180,180,180);
