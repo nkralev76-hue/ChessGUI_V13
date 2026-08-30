@@ -3345,8 +3345,8 @@ static void draw_bottom_log(void){
         // moves are shown in the MOVES panel, not here).
         int ly=y0+22;
         int box_h=LOG_H-26;
-        frect(8,ly,rw-16,box_h,0,0,0);
-        orect(8,ly,rw-16,box_h,55,55,55);
+        frect(COORD_W,ly,rw - COORD_W - 8,box_h,0,0,0);
+        orect(COORD_W,ly,rw - COORD_W - 8,box_h,55,55,55);
         int line_h=12;
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
         int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_engine(bottom_log_lines[i])==-1) cnt++;
@@ -3355,10 +3355,10 @@ static void draw_bottom_log(void){
         for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
             char *ln = bottom_log_lines[i];
             if(!ln[0] || bottom_log_engine(ln)!=-1) continue;
-            dtxt_raw(12, ly+4+(show_n-1-drawn)*line_h, ln,1, 180,180,180);
+            dtxt_raw(COORD_W+4, ly+4+(show_n-1-drawn)*line_h, ln,1, 180,180,180);
             drawn++;
         }
-        if(cnt==0) dtxt_raw(12, ly+4, "(log empty — engine and game messages will appear here)",1, 110,110,110);
+        if(cnt==0) dtxt_raw(COORD_W+4, ly+4, "(log empty — engine and game messages will appear here)",1, 110,110,110);
         return;
     }
     /* v13: Out1 / Out2 tabs — raw UCI protocol for Engine 1 / Engine 2, like
@@ -3368,8 +3368,8 @@ static void draw_bottom_log(void){
         int out_ei = (bottom_log_tab==0)?0:1;
         int ly=y0+22;
         int box_h=LOG_H-26;
-        frect(8,ly,rw-16,box_h,0,0,0);
-        orect(8,ly,rw-16,box_h,55,55,55);
+        frect(COORD_W,ly,rw - COORD_W - 8,box_h,0,0,0);
+        orect(COORD_W,ly,rw - COORD_W - 8,box_h,55,55,55);
         int line_h=12;
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
         int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_engine(bottom_log_lines[i])==out_ei) cnt++;
@@ -3382,10 +3382,10 @@ static void draw_bottom_log(void){
             if(strstr(ln,"[SEND")){ colR=150;colG=200;colB=255; }
             else if(strstr(ln,"[RECV")){ colR=255;colG=210;colB=150; }
             else if(strstr(ln,"[ENGINE")){ colR=255;colG=160;colB=120; }
-            dtxt_raw(12, ly+4+(show_n-1-drawn)*line_h, ln,1, colR,colG,colB);
+            dtxt_raw(COORD_W+4, ly+4+(show_n-1-drawn)*line_h, ln,1, colR,colG,colB);
             drawn++;
         }
-        if(cnt==0) dtxt_raw(12, ly+4, bottom_log_tab==0? "(no Engine 1 (E1) output yet)":"(no Engine 2 (E2) output yet)",1, 110,110,110);
+        if(cnt==0) dtxt_raw(COORD_W+4, ly+4, bottom_log_tab==0? "(no Engine 1 (E1) output yet)":"(no Engine 2 (E2) output yet)",1, 110,110,110);
     }
 }
 
