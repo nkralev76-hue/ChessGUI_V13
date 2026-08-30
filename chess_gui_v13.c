@@ -2172,22 +2172,34 @@ static const char*menu_item(int mi,int ii){
     return mi==0?GITEMS[ii]:mi==1?SITEMS[ii]:mi==2?EITEMS[ii]:mi==3?TITEMS[ii]:HITEMS[ii];
 }
 static void draw_menus(int mx,int my){
-    frect(0,0,WIN_W,MENU_H,0,0,0);
-    SDL_SetRenderDrawColor(ren,80,80,80,255);SDL_RenderDrawLine(ren,0,MENU_H-1,WIN_W,MENU_H-1);
+    // v14.4: по-красиво меню — градиент и оранжев акцент
+    for(int i=0;i<MENU_H;i++){
+        int c = 10 + i*10/MENU_H;
+        SDL_SetRenderDrawColor(ren,c,c,c+4,255);
+        SDL_RenderDrawLine(ren,0,i,WIN_W,i);
+    }
+    SDL_SetRenderDrawColor(ren,255,165,0,255); SDL_RenderDrawLine(ren,0,MENU_H-1,WIN_W,MENU_H-1);
+    SDL_SetRenderDrawColor(ren,60,60,70,255); SDL_RenderDrawLine(ren,0,MENU_H-2,WIN_W,MENU_H-2);
     if(!ai_thinking){int tw=(int)(strlen(msg)*9*UI_TEXT_SCALE);if(tw<WIN_W-200)dtxt_raw(WIN_W-tw-4,14,msg,1,130,130,160);}
-    int mw=110,mx0=4,gap=4;
+    int mw=120,mx0=4,gap=4;
     for(int mi=0;mi<N_MENUS;mi++){
         int bx=mx0+mi*(mw+gap),by=3,bh=MENU_H-6;
         int hov=(mx>=bx&&mx<=bx+mw&&my>=by&&my<=by+bh),act=(open_menu==mi);
         frect(bx,by,mw,bh, act?48: (hov?28:0), act?26:(hov?28:0), act?0:(hov?28:0)); /* CMD: orange when active, gray when hover */
         if(act) orect(bx,by,mw,bh,255,165,0);
         else if(hov) orect(bx,by,mw,bh,90,90,90);
-        int tw=(int)(strlen(MNAME[mi])*9*UI_TEXT_SCALE+9*UI_TEXT_SCALE);
+        int tw=(int)(strlen(MNAME[mi])*9+9);
         dtxt_raw(bx+(mw-tw)/2,by+11,MNAME[mi],1,act?255:(hov?240:210),act?255:(hov?255:230),act?255:(hov?240:210));
         if(open_menu==mi){
             int n=menu_count(mi),ih=26,iw=(mi==5)?320:220,ix=bx,iy=MENU_H;
             if(ix+iw>WIN_W)ix=WIN_W-iw-2;
-            frect(ix,iy,iw,n*ih+8,0,0,0);orect(ix,iy,iw,n*ih+8,90,90,90);
+            // soft shadow
+            SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(ren,0,0,0,90);
+            SDL_Rect sh={ix+4,iy+4,iw,n*ih+8}; SDL_RenderFillRect(ren,&sh);
+            SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_NONE);
+            frect(ix,iy,iw,n*ih+8,18,18,24);orect(ix,iy,iw,n*ih+8,80,80,95);
+            SDL_SetRenderDrawColor(ren,255,165,0,120); SDL_RenderDrawLine(ren,ix,iy,ix+iw,iy);
             for(int ii=0;ii<n;ii++){
                 int iy2=iy+4+ii*ih;
                 /* separator rows (header rows starting with ---) */
@@ -2196,13 +2208,15 @@ static void draw_menus(int mx,int my){
                 if(mi==2 && (ii==0||ii==2||ii==6)) is_sep=1;
                 if(mi==3 && (ii==0||ii==5||ii==10||ii==15)) is_sep=1;
                 if(is_sep){
-                    SDL_SetRenderDrawColor(ren,60,60,90,255);
-                    SDL_RenderDrawLine(ren,ix+4,iy2+ih/2,ix+iw-4,iy2+ih/2);
+                    SDL_SetRenderDrawColor(ren,80,70,50,255);
+                    SDL_RenderDrawLine(ren,ix+8,iy2+ih/2,ix+iw-8,iy2+ih/2);
+                    SDL_SetRenderDrawColor(ren,40,40,50,255);
+                    SDL_RenderDrawLine(ren,ix+8,iy2+ih/2+1,ix+iw-8,iy2+ih/2+1);
                     dtxt_raw(ix+8,iy2+4,menu_item(mi,ii),1,80,80,120);
                     continue;
                 }
                 int hovi=(mx>=ix&&mx<ix+iw&&my>=iy2&&my<iy2+ih);
-                if(hovi)frect(ix+2,iy2,iw-4,ih-2,22,22,22);
+                if(hovi){ frect(ix+2,iy2,iw-4,ih-2,35,30,20); SDL_SetRenderDrawColor(ren,255,165,0,255); SDL_RenderDrawLine(ren,ix+2,iy2,ix+2,iy2+ih-2); }
                 int mk=0;
                 if(mi==1){
                     if(ii==0&&sound_on)mk=1; if(ii==1&&flip_board)mk=1; if(ii==2&&use_book)mk=1;
@@ -2352,7 +2366,7 @@ static int uci_engine_ponder_enabled(int ei){
 }
 
 static void handle_menu(int mx,int my){
-    int mw=110,mx0=4,gap=4;
+    int mw=120,mx0=4,gap=4;
     for(int mi=0;mi<N_MENUS;mi++){
         int bx=mx0+mi*(mw+gap);
         if(mx>=bx&&mx<=bx+mw&&my>=3&&my<=MENU_H-3){open_menu=(open_menu==mi)?-1:mi;return;}
@@ -3121,59 +3135,67 @@ static void draw_sidebar(int mx,int my){
                     fcircle(dx,dy,3, 70,70,70);
                 }
             }
-            /* Stats line */
-            int disp_depth = eng_analysis[ei].has_data ? eng_analysis[ei].depth : g_best_depth;
-            int disp_eval_raw = eng_analysis[ei].has_data ? eng_analysis[ei].eval : g_best_eval;
-            int evforside = evfl ? -disp_eval_raw : disp_eval_raw;
-            char evals[24];
-            if(evforside>9000) strcpy(evals,"M+");
-            else if(evforside<-9000) strcpy(evals,"M-");
-            else snprintf(evals,sizeof(evals),"%+.2f", evforside/100.0);
-            char st1[96];
-            long long dnps = eng_analysis[ei].has_data ? eng_analysis[ei].nps : g_nps;
-            char nps_s[32];
-            if(dnps>=1000000) snprintf(nps_s,sizeof(nps_s),"%.1fM",dnps/1000000.0);
-            else if(dnps>=1000) snprintf(nps_s,sizeof(nps_s),"%.0fK",dnps/1000.0);
-            else snprintf(nps_s,sizeof(nps_s),"%lld", dnps);
-            snprintf(st1,sizeof(st1),"D%d  %s  NPS:%s", disp_depth, evals, nps_s);
-            dtxt(FRAME_W+11, sy+22, st1, 1, 0,0,0);
-            dtxt(FRAME_W+10, sy+21, st1, 1, 200,200,200);
-            /* PV */
-            const char *pvsrc = eng_analysis[ei].has_data ? eng_analysis[ei].pv : g_pv_str;
-            if(pvsrc[0]){
-                int pv_avail=panel_w-20;
-                if(pv_avail<60) pv_avail=60;
-                int max_ch=(int)(pv_avail/(9*UI_TEXT_SCALE));
-                if(max_ch<10) max_ch=10; if(max_ch>180) max_ch=180;
-                char pv_display[200];
-                int pvlen=(int)strlen(pvsrc);
-                if(pvlen>max_ch) pvlen=max_ch;
-                strncpy(pv_display,pvsrc,pvlen); pv_display[pvlen]=0;
-                // CMD bold PV — shadow + bright
-                dtxt(FRAME_W+11, sy+38, pv_display, 1, 30,30,30);
-                dtxt(FRAME_W+10, sy+37, pv_display, 1, 232,232,232);
-                if((int)strlen(pvsrc)>max_ch && per_h>78){
-                    int pv2_start=max_ch;
-                    int pv2_len=(int)strlen(pvsrc)-pv2_start;
-                    if(pv2_len>max_ch) pv2_len=max_ch;
-                    strncpy(pv_display,pvsrc+pv2_start,pv2_len); pv_display[pv2_len]=0;
-                    dtxt(FRAME_W+11, sy+52, pv_display, 1, 20,20,20);
-                    dtxt(FRAME_W+10, sy+51, pv_display, 1, 170,170,170);
+            if(is_active_thinking){
+                /* Stats line — само когато двигателят е на ход */
+                int disp_depth = eng_analysis[ei].has_data ? eng_analysis[ei].depth : g_best_depth;
+                int disp_eval_raw = eng_analysis[ei].has_data ? eng_analysis[ei].eval : g_best_eval;
+                int evforside = evfl ? -disp_eval_raw : disp_eval_raw;
+                char evals[24];
+                if(evforside>9000) strcpy(evals,"M+");
+                else if(evforside<-9000) strcpy(evals,"M-");
+                else snprintf(evals,sizeof(evals),"%+.2f", evforside/100.0);
+                char st1[96];
+                long long dnps = eng_analysis[ei].has_data ? eng_analysis[ei].nps : g_nps;
+                char nps_s[32];
+                if(dnps>=1000000) snprintf(nps_s,sizeof(nps_s),"%.1fM",dnps/1000000.0);
+                else if(dnps>=1000) snprintf(nps_s,sizeof(nps_s),"%.0fK",dnps/1000.0);
+                else snprintf(nps_s,sizeof(nps_s),"%lld", dnps);
+                snprintf(st1,sizeof(st1),"D%d  %s  NPS:%s", disp_depth, evals, nps_s);
+                dtxt(FRAME_W+11, sy+22, st1, 1, 0,0,0);
+                dtxt(FRAME_W+10, sy+21, st1, 1, 200,200,200);
+                /* PV */
+                const char *pvsrc = eng_analysis[ei].has_data ? eng_analysis[ei].pv : g_pv_str;
+                if(pvsrc[0]){
+                    int pv_avail=panel_w-20;
+                    if(pv_avail<60) pv_avail=60;
+                    int max_ch=(int)(pv_avail/(9*UI_TEXT_SCALE));
+                    if(max_ch<10) max_ch=10; if(max_ch>180) max_ch=180;
+                    char pv_display[200];
+                    int pvlen=(int)strlen(pvsrc);
+                    if(pvlen>max_ch) pvlen=max_ch;
+                    strncpy(pv_display,pvsrc,pvlen); pv_display[pvlen]=0;
+                    dtxt(FRAME_W+11, sy+38, pv_display, 1, 30,30,30);
+                    dtxt(FRAME_W+10, sy+37, pv_display, 1, 232,232,232);
+                    if((int)strlen(pvsrc)>max_ch && per_h>78){
+                        int pv2_start=max_ch;
+                        int pv2_len=(int)strlen(pvsrc)-pv2_start;
+                        if(pv2_len>max_ch) pv2_len=max_ch;
+                        strncpy(pv_display,pvsrc+pv2_start,pv2_len); pv_display[pv2_len]=0;
+                        dtxt(FRAME_W+11, sy+52, pv_display, 1, 20,20,20);
+                        dtxt(FRAME_W+10, sy+51, pv_display, 1, 170,170,170);
+                    }
+                    char nbuf[64];
+                    long long nn = eng_analysis[ei].has_data ? eng_analysis[ei].nodes : nodes_count;
+                    if(nn>=1000000000) snprintf(nbuf,sizeof(nbuf),"Nodes %.1fG", nn/1e9);
+                    else if(nn>=1000000) snprintf(nbuf,sizeof(nbuf),"Nodes %.1fM", nn/1e6);
+                    else if(nn>=1000) snprintf(nbuf,sizeof(nbuf),"Nodes %.0fK", nn/1000.0);
+                    else snprintf(nbuf,sizeof(nbuf),"Nodes %lld", nn);
+                    int ny = sy + per_h - 14;
+                    dtxt(FRAME_W+10, ny, nbuf, 1, 120,120,120);
+                    char evb2[16]; snprintf(evb2,sizeof(evb2),"%s", evals);
+                    dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 255,165,0);
+                } else {
+                    dtxt(FRAME_W+10, sy+37, "(no analysis yet)", 1, 110,110,120);
                 }
-                /* nodes on last line */
-                char nbuf[64];
-                long long nn = eng_analysis[ei].has_data ? eng_analysis[ei].nodes : nodes_count;
-                if(nn>=1000000000) snprintf(nbuf,sizeof(nbuf),"Nodes %.1fG", nn/1e9);
-                else if(nn>=1000000) snprintf(nbuf,sizeof(nbuf),"Nodes %.1fM", nn/1e6);
-                else if(nn>=1000) snprintf(nbuf,sizeof(nbuf),"Nodes %.0fK", nn/1000.0);
-                else snprintf(nbuf,sizeof(nbuf),"Nodes %lld", nn);
-                int ny = sy + per_h - 14;
-                dtxt(FRAME_W+10, ny, nbuf, 1, 120,120,120);
-                /* small eval bar indicator — orange for cmd */
-                char evb2[16]; snprintf(evb2,sizeof(evb2),"%s", evals);
-                dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 255,165,0);
             } else {
-                dtxt(FRAME_W+10, sy+30, "(no analysis yet)", 1, 110,110,120);
+                dtxt(FRAME_W+10, sy+22, "(waiting — not to move)", 1, 110,110,120);
+                if(eng_analysis[ei].has_data){
+                    char evals[24]; int evforside = evfl ? -eng_analysis[ei].eval : eng_analysis[ei].eval;
+                    if(evforside>9000) strcpy(evals,"M+");
+                    else if(evforside<-9000) strcpy(evals,"M-");
+                    else snprintf(evals,sizeof(evals),"%+.2f", evforside/100.0);
+                    dtxt(FRAME_W+panel_w-75, sy+per_h-14, evals, 1, 120,120,120);
+                }
             }
             sy+=per_h+6;
             if(pi==0){
@@ -5338,33 +5360,49 @@ static void draw_path_dialog(void){
    right-click a Spin row to step it down. Scroll wheel or the arrows to page through. */
 static void draw_uci_options_dialog(void){
     int ei=options_engine;
-    int dw=640,dh=460;
+    int dw=680,dh=480;
     int dx=(WIN_W-dw)/2,dy=(WIN_H-dh)/2;
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(ren,0,0,0,190);
     SDL_Rect ov={0,0,WIN_W,WIN_H};SDL_RenderFillRect(ren,&ov);
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_NONE);
-    frect(dx,dy,dw,dh,26,26,34);orect(dx,dy,dw,dh,100,140,220);
+    // soft shadow
+    SDL_SetRenderDrawColor(ren,0,0,0,80);
+    SDL_Rect sh={dx+6,dy+6,dw,dh}; SDL_RenderFillRect(ren,&sh);
+    SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_NONE);
+    frect(dx,dy,dw,dh,32,32,40);orect(dx,dy,dw,dh,90,90,110);
+    SDL_SetRenderDrawColor(ren,60,60,75,255); SDL_RenderDrawLine(ren,dx+1,dy+1,dx+dw-2,dy+1);
 
-    /* header with engine tabs + close button */
-    frect(dx,dy,dw,36,20,20,28);
+    /* header with gradient */
+    for(int i=0;i<36;i++){
+        int c = 28 + i*12/36;
+        SDL_SetRenderDrawColor(ren,c,c+2,c+8,255);
+        SDL_RenderDrawLine(ren,dx,dy+i,dx+dw,dy+i);
+    }
+    orect(dx,dy,dw,36,60,60,80);
     char ename[64]; strncpy(ename,uci_eng[ei].path[0]?uci_eng[ei].path:"(not loaded)",63);
     char *slash=strrchr(ename,'/'); char *slash2=strrchr(ename,'\\');
     if(slash2&&(!slash||slash2>slash))slash=slash2;
     if(slash) memmove(ename,slash+1,strlen(slash));
-    char title[128]; snprintf(title,sizeof(title),"UCI Options - Engine %d: %s",ei+1,ename);
-    dtxt(dx+10,dy+13,title,1,220,220,240);
-    /* engine tab switcher */
+    char title[128]; snprintf(title,sizeof(title),"UCI Options — Engine %d: %s",ei+1,ename);
+    dtxt(dx+14,dy+11,title,1,240,220,180);
+    dtxt(dx+13,dy+10,title,1,255,240,200);
+    /* engine tab switcher — pill style */
     for(int t=0;t<2;t++){
-        int tx=dx+dw-150+t*70,ty=dy+6,tw=64,th=24;
+        int tx=dx+dw-160+t*74,ty=dy+7,tw=68,th=22;
         int act=(t==ei);
-        frect(tx,ty,tw,th,act?60:35,act?90:35,act?60:45);orect(tx,ty,tw,th,80,100,80);
-        char lb[16];sprintf(lb,"Eng %d",t+1);
-        dtxt(tx+8,ty+8,lb,1,act?255:170,act?255:170,act?255:190);
+        if(act){ frect(tx,ty,tw,th,255,165,0); orect(tx,ty,tw,th,255,200,80); }
+        else { frect(tx,ty,tw,th,45,45,55); orect(tx,ty,tw,th,80,80,95); }
+        char lb[16];sprintf(lb,"Engine %d",t+1);
+        dtxt(tx+10,ty+6,lb,1,act?20:180,act?20:180,act?20:200);
     }
-    /* close X */
-    frect(dx+dw-28,dy+6,22,22,60,30,30);orect(dx+dw-28,dy+6,22,22,140,70,70);
-    dtxt(dx+dw-23,dy+11,"X",1,240,200,200);
+    /* close X — rounded */
+    {
+        int cx=dx+dw-28, cy=dy+7;
+        SDL_SetRenderDrawColor(ren,70,30,30,255); SDL_Rect cr={cx,cy,22,22}; SDL_RenderFillRect(ren,&cr);
+        orect(cx,cy,22,22,160,70,70);
+        dtxt(cx+7,cy+5,"X",1,255,200,200);
+    }
 
     int list_y=dy+42, list_h=dh-42-30;
     int n=uci_eng[ei].num_options;
@@ -5379,19 +5417,33 @@ static void draw_uci_options_dialog(void){
             int oi=options_scroll+row;
             UCIOption *o=&uci_eng[ei].options[oi];
             int ry=list_y+row*row_h;
-            if(row%2==0) frect(dx+4,ry,dw-8,row_h-2,32,32,42);
+            // alternating row with subtle hover
+            int is_hover = 0; // could add mouse hover later
+            if(row%2==0) frect(dx+6,ry,dw-12,row_h-2,38,38,48);
+            else frect(dx+6,ry,dw-12,row_h-2,32,32,42);
+            if(is_hover) frect(dx+6,ry,dw-12,row_h-2,55,45,20);
+            // icon per type
+            char icon[4]=" ";
+            int icR=150,icG=150,icB=160;
+            if(o->type==UOPT_CHECK){ strcpy(icon, o->cur_check?"[x]":"[ ]"); icR=o->cur_check?255:120; icG=o->cur_check?165:120; icB=o->cur_check?0:120; }
+            else if(o->type==UOPT_SPIN){ strcpy(icon,"#"); icR=170; icG=210; icB=230; }
+            else if(o->type==UOPT_COMBO){ strcpy(icon,">"); icR=180; icG=180; icB=220; }
+            else if(o->type==UOPT_STRING){ strcpy(icon,"T"); icR=200; icG=220; icB=180; }
+            else if(o->type==UOPT_BUTTON){ strcpy(icon,">>"); icR=255; icG=200; icB=80; }
+            dtxt(dx+12,ry+8,icon,1,icR,icG,icB);
             char buf[220];
             switch(o->type){
-                case UOPT_CHECK: snprintf(buf,sizeof(buf),"[%s] %s",o->cur_check?"x":" ",o->name); break;
+                case UOPT_CHECK: snprintf(buf,sizeof(buf),"%s",o->name); break;
                 case UOPT_SPIN:  snprintf(buf,sizeof(buf),"%s: %d  (range %d-%d)",o->name,o->cur_spin,o->spin_min,o->spin_max); break;
                 case UOPT_COMBO: snprintf(buf,sizeof(buf),"%s: %s",o->name,o->combo_count>0?o->combo_vars[o->combo_cur_idx]:"?"); break;
-                case UOPT_STRING:snprintf(buf,sizeof(buf),"%s: %s",o->name,o->cur_str); break;
-                case UOPT_BUTTON:snprintf(buf,sizeof(buf),"%s  [click to send]",o->name); break;
+                case UOPT_STRING:snprintf(buf,sizeof(buf),"%s: %s",o->name,o->cur_str[0]?o->cur_str:"<empty>"); break;
+                case UOPT_BUTTON:snprintf(buf,sizeof(buf),"%s",o->name); break;
             }
-            int maxch=(int)((dw-24)/(9*UI_TEXT_SCALE)); if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
-            int R=210,G=210,B=225;
-            if(o->type==UOPT_BUTTON){R=220;G=190;B=120;}
-            else if(o->type==UOPT_SPIN){R=170;G=210;B=230;}
+            int maxch=(int)((dw-40)/(9*UI_TEXT_SCALE)); if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
+            int R=220,G=220,B=230;
+            if(o->type==UOPT_BUTTON){R=255;G=220;B=120;}
+            else if(o->type==UOPT_SPIN){R=180;G=220;B=240;}
+            else if(o->type==UOPT_CHECK && o->cur_check){R=255;G=235;B=180;}
             dtxt(dx+12,ry+9,buf,1,R,G,B);
         }
         /* scroll indicators */
@@ -5640,7 +5692,7 @@ int main(void){
                 }
                 if(uci_opts_dialog_active){
                     int cmx=e.button.x,cmy=e.button.y;
-                    int dw=640,dh=460;
+                    int dw=680,dh=480;
                     int dx=(WIN_W-dw)/2,dy=(WIN_H-dh)/2;
                     if(cmx<dx||cmx>dx+dw||cmy<dy||cmy>dy+dh){ uci_opts_dialog_active=0; goto skip; } /* click outside = close */
                     /* close X */
