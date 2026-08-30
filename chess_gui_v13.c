@@ -2132,8 +2132,6 @@ static const char*TITEMS[]={
     "W: Built-in","W: UCI Engine 1","W: UCI Engine 2","W: Human",
     "--- Black player ---",
     "B: Built-in","B: UCI Engine 1","B: UCI Engine 2","B: Human",
-    "--- Real Tournament ---",
-    "Round Robin 3 engines (6g)","Round Robin all ready",
     "--- Actions ---",
     "Start tournament","Stop tournament"
 };
@@ -2196,7 +2194,7 @@ static void draw_menus(int mx,int my){
                 int is_sep = 0;
                 if(mi==1 && (ii==3||ii==12||ii==20||ii==23)) is_sep=1;
                 if(mi==2 && (ii==0||ii==2||ii==6)) is_sep=1;
-                if(mi==3 && (ii==0||ii==5||ii==10||ii==15||ii==18)) is_sep=1;
+                if(mi==3 && (ii==0||ii==5||ii==10||ii==15)) is_sep=1;
                 if(is_sep){
                     SDL_SetRenderDrawColor(ren,60,60,90,255);
                     SDL_RenderDrawLine(ren,ix+4,iy2+ih/2,ix+iw-4,iy2+ih/2);
@@ -2241,10 +2239,7 @@ static void draw_menus(int mx,int my){
                     if(ii==12&&tourney_player[1]==1)mk=1;
                     if(ii==13&&tourney_player[1]==2)mk=1;
                     if(ii==14&&tourney_player[1]==3)mk=1;
-                    if(ii==16&&tourney_is_rr&&tourney_rr_num==3)mk=1;
-                    if(ii==17&&tourney_is_rr&&tourney_rr_num>0)mk=1;
-                    if(ii==19&&tourney_active&&!tourney_is_rr)mk=1;
-                    if(ii==19&&tourney_active&&tourney_is_rr)mk=1;
+                    if(ii==16&&tourney_active)mk=1;
                 }
                 if(mk)dtxt_raw(ix+4,iy2+8,"*",1,100,220,100);
                 int txtx = ix+20;
@@ -2357,7 +2352,7 @@ static void handle_menu(int mx,int my){
             int is_sep=0;
             if(mi==1&&(ii==3||ii==12||ii==20||ii==23))is_sep=1;
             if(mi==2&&(ii==0||ii==2||ii==6))is_sep=1;
-            if(mi==3&&(ii==0||ii==5||ii==10||ii==15||ii==18))is_sep=1;
+            if(mi==3&&(ii==0||ii==5||ii==10||ii==15))is_sep=1;
             if(is_sep) continue;
             if(mx>=ix&&mx<ix+iw&&my>=iy2&&my<iy2+ih){
                 open_menu=-1;
@@ -2516,7 +2511,7 @@ static void handle_menu(int mx,int my){
                     if(ii==1)tourney_total=2;
                     else if(ii==2)tourney_total=4;
                     else if(ii==3)tourney_total=10;
-                    else if(ii==4)tourney_total=20;
+                    else if(ii==4)tourney_total==20;
                     else if(ii==6)tourney_player[0]=0;
                     else if(ii==7)tourney_player[0]=1;
                     else if(ii==8)tourney_player[0]=2;
@@ -2525,10 +2520,8 @@ static void handle_menu(int mx,int my){
                     else if(ii==12)tourney_player[1]=1;
                     else if(ii==13)tourney_player[1]=2;
                     else if(ii==14)tourney_player[1]=3;
-                    else if(ii==16)tourney_start_round_robin(3);
-                    else if(ii==17)tourney_start_round_robin(0);
-                    else if(ii==19)tourney_start_now();
-                    else if(ii==20)tourney_stop();
+                    else if(ii==16)tourney_start_now();
+                    else if(ii==17)tourney_stop();
                 }
                 if(mi==4){
                     /* v12.3: Options menu now just launches the overlay window */
@@ -2648,26 +2641,9 @@ static void draw_eval_sparkline(int x,int y,int w,int h){
         pts_x[pcnt]=px; pts_y[pcnt]=py; pts_ev[pcnt]=ev; pcnt++;
     }
     if(pcnt<1) { orect(x,y,w,h,70,70,70); return; }
-    // запълване под линията до центъра с полупрозрачен цвят
+    // леко запълване — по-дискретно, за да не се слива с бара
     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
-    int mid_y = y+h/2;
-    for(int i=0;i<pcnt-1;i++){
-        int x1=pts_x[i], y1=pts_y[i], x2=pts_x[i+1], y2=pts_y[i+1];
-        int ev = pts_ev[i+1];
-        if(ev>30) SDL_SetRenderDrawColor(ren,255,165,0,28);
-        else if(ev<-30) SDL_SetRenderDrawColor(ren,80,130,220,28);
-        else SDL_SetRenderDrawColor(ren,180,180,180,18);
-        // вертикален градиент: рисуваме колони между точките
-        int steps = abs(x2-x1);
-        if(steps<1) steps=1;
-        for(int s=0;s<=steps;s++){
-            float t=(float)s/steps;
-            int py = (int)(y1 + t*(y2-y1));
-            int px = x1 + (int)(t*(x2-x1));
-            if(py < mid_y) SDL_RenderDrawLine(ren, px, py, px, mid_y);
-            else SDL_RenderDrawLine(ren, px, mid_y, px, py);
-        }
-    }
+    SDL_SetRenderDrawColor(ren,0,0,0,0);
     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
     // линия на графиката — по-дебела и с цвят според оценката
     int prevx=pts_x[0], prevy=pts_y[0], have=1;
@@ -2689,22 +2665,7 @@ static void draw_eval_sparkline(int x,int y,int w,int h){
         SDL_Rect d={px-2,py-2,4,4}; SDL_RenderFillRect(ren,&d);
         SDL_SetRenderDrawColor(ren,0,0,0,255); SDL_RenderDrawRect(ren,&d);
     }
-    // информационен оверлей: текуща оценка, мин/макс, средна
-    if(pcnt>0){
-        int cur_ev = pts_ev[pcnt-1];
-        char info[64];
-        snprintf(info,sizeof(info),"%.2f", cur_ev/100.0);
-        int colR = cur_ev>30?255: (cur_ev<-30?80:180);
-        int colG = cur_ev>30?165: (cur_ev<-30?130:180);
-        int colB = cur_ev>30?0: (cur_ev<-30?220:180);
-        // фон за текста
-        frect(x+2, y+2, 52, 12, 20,20,20);
-        orect(x+2, y+2, 52, 12, 60,60,60);
-        dtxt_raw(x+6, y+4, info,1, colR,colG,colB);
-        // мин/макс в горния десен ъгъл
-        char mm[32]; snprintf(mm,sizeof(mm),"%+.1f/%+.1f", max_ev/100.0, min_ev/100.0);
-        dtxt_raw(x+w-62, y+4, mm,1, 120,120,120);
-    }
+    // без дублирана оценка — графиката показва само линията
     orect(x,y,w,h,70,70,70);
 }
 /* v12.1: lightweight opening-name recognizer (coordinate-notation prefix match).
@@ -2958,7 +2919,7 @@ static void draw_eval_panel_v14(int sy, int sw, int dyn_panel_h){
         char evb[16]; if(disp_ev>9000) strcpy(evb,"M+"); else if(disp_ev<-9000) strcpy(evb,"M-"); else sprintf(evb,"%+.1f",disp_ev/100.0);
         int evcol=disp_ev>=0?255:100, evG=disp_ev>=0?165:160, evB=disp_ev>=0?0:255;
         dtxt(bar_x+bw+6, bar_y+bh/2-4, evb,1,evcol,evG,evB);
-        int spx=bar_x+bw+48, spw=(sw-8) - (bw+56); if(spw<60) spw=60;
+        int spx=bar_x+bw+62, spw=(sw-8) - (bw+70); if(spw<60) spw=60;
         draw_eval_sparkline(spx, bar_y, spw, bh);
     }
 }
