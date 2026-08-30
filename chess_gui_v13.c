@@ -2325,6 +2325,20 @@ static void uci_disable_engine_pb(int ei){
     uci_send_raw(ei, "setoption name Ponder value false");
     uci_send_raw(ei, "setoption name PermanentBrain value false");
 }
+static void uci_set_book(int ei, int enable){
+    if(!uci_eng[ei].ready || !UCI_VALID(ei)) return;
+    // Common UCI book options — engines ignore unknown ones
+    uci_send_raw(ei, enable ? "setoption name OwnBook value true" : "setoption name OwnBook value false");
+    uci_send_raw(ei, enable ? "setoption name UseBook value true" : "setoption name UseBook value false");
+    uci_send_raw(ei, enable ? "setoption name Book value true" : "setoption name Book value false");
+    uci_send_raw(ei, enable ? "setoption name Use Book value true" : "setoption name Use Book value false");
+}
+static void uci_set_book_for_all(int enable){
+    for(int ei=0; ei<MAX_ENGINES; ei++) uci_set_book(ei, enable);
+    char _bmsg[64]; snprintf(_bmsg,sizeof(_bmsg),"Book %s for UCI engines", enable?"ON":"OFF");
+    uci_dbg_log("BOOK", -1, _bmsg);
+    bottom_log_push(_bmsg);
+}
 
 /* v12.11: Check if a UCI engine has Ponder enabled in its options.
    The GUI's go-ponder should only be sent when the engine wants it. */
@@ -2375,7 +2389,7 @@ static void handle_menu(int mx,int my){
                 if(mi==1){
                     if(ii==0)sound_on=!sound_on;
                     else if(ii==1)flip_board=!flip_board;
-                    else if(ii==2)use_book=!use_book;
+                    else if(ii==2){ use_book=!use_book; uci_set_book_for_all(use_book); if(use_book) bottom_log_push("Book ON — GUI book + UCI OwnBook ON"); else bottom_log_push("Book OFF — GUI book + UCI OwnBook OFF"); }
                     else if(ii==4){cur_theme=0;}
                     else if(ii==5){cur_theme=1;}
                     else if(ii==6){cur_theme=2;}
@@ -2393,7 +2407,7 @@ static void handle_menu(int mx,int my){
                     else if(ii==19){base_time=120*60*1000;increment=0;}
                     else if(ii==21){base_time=5*60*1000;increment=3*1000;}
                     else if(ii==22){base_time=4*60*1000;increment=2*1000;}
-                    else if(ii==24){ use_ponder=!use_ponder; if(!use_ponder){ stop_pondering(); cancel_uci_ponder(); } }
+                    else if(ii==24){ use_ponder=!use_ponder; if(!use_ponder){ stop_pondering(); cancel_uci_ponder(); bottom_log_push("Ponder OFF"); } else bottom_log_push("Ponder ON"); }
                     if(ii>=13&&ii<=22){ char _dbg[96]; snprintf(_dbg,sizeof _dbg,
                         "Settings menu ii=%d clicked -> base_time=%u increment=%u",
                         ii, base_time, increment); uci_dbg_log("CLOCK", -1, _dbg); }
@@ -3858,6 +3872,13 @@ static void start_ai_move(void) {
        selected UCI engine (use_uci_engine/active_engine) for BOTH sides,
        so after loading Engine 1 the built-in engine was silently ignored
        even when the user had set W: Built-in / B: Engine 1. */
+#ifdef USE_BOOK
+    if(use_book){
+        Move bm=book_move();
+        if(bm.fr>=0){ai_result=bm;ai_done=1;ai_thinking=0;SDL_SetWindowTitle(win,"Book!");return;}
+    }
+#endif
+
     int want_uci = use_uci_engine;
     int which_ei = active_engine; /* default: selected engine */
     
@@ -3889,12 +3910,7 @@ static void start_ai_move(void) {
             which_ei, uci_eng[which_ei].ready, UCI_VALID(which_ei));
         uci_dbg_log("WARN", which_ei, _fbmsg);
     }
-#ifdef USE_BOOK
-    if(use_book){
-        Move bm=book_move();
-        if(bm.fr>=0){ai_result=bm;ai_done=1;ai_thinking=0;SDL_SetWindowTitle(win,"Book!");return;}
-    }
-#endif
+
     eng_analysis[ENG_BUILTIN_IDX].is_thinking=1;
     if(!eng_analysis[ENG_BUILTIN_IDX].has_data){
         eng_analysis_update(ENG_BUILTIN_IDX, "StrongEngine (Built-in)", 0, 0, "", 0, 0, 1);
@@ -4408,9 +4424,10 @@ static int uci_spawn_engine(int ei, const char *path){
                 uci_send_raw(ei, "isready");
                 int w2=0;
                 while(w2<2000){
-                    if(uci_recv_line(ei, buf, 512, 50)&&strncmp(buf,"readyok",7)==0) return 1;
+                    if(uci_recv_line(ei, buf, 512, 50)&&strncmp(buf,"readyok",7)==0) { uci_set_book(ei, use_book); return 1; }
                     w2+=50;
                 }
+                uci_set_book(ei, use_book);
                 return 1;
             }
         } else {
@@ -4565,9 +4582,10 @@ static int uci_spawn_engine(int ei, const char *path){
                 uci_send_raw(ei, "isready");
                 int w2=0;
                 while(w2<2000){
-                    if(uci_recv_line(ei, buf, 512, 50)&&strncmp(buf,"readyok",7)==0) return 1;
+                    if(uci_recv_line(ei, buf, 512, 50)&&strncmp(buf,"readyok",7)==0) { uci_set_book(ei, use_book); return 1; }
                     w2+=50;
                 }
+                uci_set_book(ei, use_book);
                 return 1;
             }
         } else {
