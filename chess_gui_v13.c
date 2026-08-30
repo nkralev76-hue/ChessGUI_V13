@@ -3098,8 +3098,9 @@ static void draw_sidebar(int mx,int my){
             int is_active_thinking = (tourney_active||aivsai)
                 ? (side>=0 && side==on_move_side)
                 : (eng_analysis[ei].is_thinking || (ai_thinking && ei==on_move_slot));
-            int bgR = is_active_thinking? 16:0, bgG=is_active_thinking?12:0, bgB=is_active_thinking?0:0;
-            int borR=is_active_thinking?255:60, borG=is_active_thinking?165:60, borB=is_active_thinking?0:60;
+            int is_blue = (side==1 || ei==1);
+            int bgR = is_active_thinking? (is_blue? 8:16):0, bgG=is_active_thinking? (is_blue?12:12):0, bgB=is_active_thinking? (is_blue?18:0):0;
+            int borR=is_active_thinking? (is_blue? 80:255):60, borG=is_active_thinking? (is_blue?130:165):60, borB=is_active_thinking? (is_blue?220:0):60;
             frect(FRAME_W+4,sy,panel_w,per_h, bgR,bgG,bgB);
             orect(FRAME_W+4,sy,panel_w,per_h, borR,borG,borB);
             /* Name */
@@ -5385,8 +5386,8 @@ static void draw_uci_options_dialog(void){
     if(slash2&&(!slash||slash2>slash))slash=slash2;
     if(slash) memmove(ename,slash+1,strlen(slash));
     char title[128]; snprintf(title,sizeof(title),"UCI Options — Engine %d: %s",ei+1,ename);
-    dtxt(dx+14,dy+11,title,1,240,220,180);
-    dtxt(dx+13,dy+10,title,1,255,240,200);
+    dtxt_raw(dx+14,dy+11,title,1,240,220,180);
+    dtxt_raw(dx+13,dy+10,title,1,255,240,200);
     /* engine tab switcher — pill style */
     for(int t=0;t<2;t++){
         int tx=dx+dw-160+t*74,ty=dy+7,tw=68,th=22;
@@ -5394,20 +5395,20 @@ static void draw_uci_options_dialog(void){
         if(act){ frect(tx,ty,tw,th,255,165,0); orect(tx,ty,tw,th,255,200,80); }
         else { frect(tx,ty,tw,th,45,45,55); orect(tx,ty,tw,th,80,80,95); }
         char lb[16];sprintf(lb,"Engine %d",t+1);
-        dtxt(tx+10,ty+6,lb,1,act?20:180,act?20:180,act?20:200);
+        dtxt_raw(tx+10,ty+6,lb,1,act?20:180,act?20:180,act?20:200);
     }
     /* close X — rounded */
     {
         int cx=dx+dw-28, cy=dy+7;
         SDL_SetRenderDrawColor(ren,70,30,30,255); SDL_Rect cr={cx,cy,22,22}; SDL_RenderFillRect(ren,&cr);
         orect(cx,cy,22,22,160,70,70);
-        dtxt(cx+7,cy+5,"X",1,255,200,200);
+        dtxt_raw(cx+7,cy+5,"X",1,255,200,200);
     }
 
     int list_y=dy+42, list_h=dh-42-30;
     int n=uci_eng[ei].num_options;
     if(n==0){
-        dtxt(dx+12,list_y+8,"No options reported by this engine (or it isn't connected yet).",1,150,150,170);
+        dtxt_raw(dx+12,list_y+8,"No options reported by this engine (or it isn't connected yet).",1,150,150,170);
     } else {
         int row_h=27;
         int visible=list_h/row_h; if(visible<1)visible=1;
@@ -5430,7 +5431,7 @@ static void draw_uci_options_dialog(void){
             else if(o->type==UOPT_COMBO){ strcpy(icon,">"); icR=180; icG=180; icB=220; }
             else if(o->type==UOPT_STRING){ strcpy(icon,"T"); icR=200; icG=220; icB=180; }
             else if(o->type==UOPT_BUTTON){ strcpy(icon,">>"); icR=255; icG=200; icB=80; }
-            dtxt(dx+12,ry+8,icon,1,icR,icG,icB);
+            dtxt_raw(dx+12,ry+8,icon,1,icR,icG,icB);
             char buf[220];
             switch(o->type){
                 case UOPT_CHECK: snprintf(buf,sizeof(buf),"%s",o->name); break;
@@ -5439,18 +5440,18 @@ static void draw_uci_options_dialog(void){
                 case UOPT_STRING:snprintf(buf,sizeof(buf),"%s: %s",o->name,o->cur_str[0]?o->cur_str:"<empty>"); break;
                 case UOPT_BUTTON:snprintf(buf,sizeof(buf),"%s",o->name); break;
             }
-            int maxch=(int)((dw-40)/(9*UI_TEXT_SCALE)); if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
+            int maxch=(dw-40)/9; if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
             int R=220,G=220,B=230;
             if(o->type==UOPT_BUTTON){R=255;G=220;B=120;}
             else if(o->type==UOPT_SPIN){R=180;G=220;B=240;}
             else if(o->type==UOPT_CHECK && o->cur_check){R=255;G=235;B=180;}
-            dtxt(dx+12,ry+9,buf,1,R,G,B);
+            dtxt_raw(dx+12,ry+9,buf,1,R,G,B);
         }
         /* scroll indicators */
-        if(options_scroll>0) dtxt(dx+dw-16,list_y-2,"^",1,180,180,220);
-        if(options_scroll+visible<n) dtxt(dx+dw-16,list_y+list_h-10,"v",1,180,180,220);
+        if(options_scroll>0) dtxt_raw(dx+dw-16,list_y-2,"^",1,180,180,220);
+        if(options_scroll+visible<n) dtxt_raw(dx+dw-16,list_y+list_h-10,"v",1,180,180,220);
     }
-    dtxt(dx+10,dy+dh-22,"Left-click = change value    Right-click = step down (Spin)    Wheel = scroll    Esc = close",1,120,130,160);
+    dtxt_raw(dx+10,dy+dh-22,"Left-click = change value    Right-click = step down (Spin)    Wheel = scroll    Esc = close",1,120,130,160);
 }
 
 /* v10: string option input dialog */
