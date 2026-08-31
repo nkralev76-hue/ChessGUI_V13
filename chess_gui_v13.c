@@ -4167,6 +4167,9 @@ static void save_pgn(void){
     ofn.lpstrTitle="Save PGN";
     ofn.Flags=OFN_OVERWRITEPROMPT;
     if(!GetSaveFileNameA(&ofn)) return;
+    /* auto-append .pgn if missing */
+    {int flen=(int)strlen(fname);
+    if(flen<4 || _stricmp(fname+flen-4,".pgn")!=0){strcat(fname,".pgn");}}
 
     FILE *f=fopen(fname,"w");
     if(!f){ sprintf(msg,"Failed to save: %s",fname); return; }
