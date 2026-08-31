@@ -2975,13 +2975,14 @@ static void draw_sidebar(int mx,int my){
         if(uci_eng[1].ready||eng_analysis[1].has_data) num_eng_tmp++;
     }
     int has_tourney = (tourney_active||tourney_played>0)?1:0;
-    int num_uniform = 3 + num_eng_tmp + has_tourney; // CAPTURED + EVAL + MOVES + engines + tourney
+    int tourney_h = has_tourney ? (tourney_is_rr?70:60) : 0;
+    int num_uniform_others = 3 + num_eng_tmp; // CAPTURED + EVAL + MOVES + engines (без турнира)
     // v14: reserve space for FEN panel (fixed height) so uniform panels fill remaining
     const int FEN_H = 38;
-    // top margin (8) + bottom ponder bar (24) + its own margin (8) + one 6px
-    // gap drawn after every panel (including the last one before the bar) + FEN gap
-    int avail_h = sh - 8 - 32 - num_uniform*6 - FEN_H - 6;
-    int dyn_panel_h = avail_h / (num_uniform>0?num_uniform:1);
+    // топ маргин + ponder bar + gaps + FEN + турнирен панел (ако има)
+    int avail_h = sh - 8 - 32 - num_uniform_others*6 - (has_tourney? (tourney_h+6):0) - FEN_H - 6;
+    int dyn_panel_h = avail_h / (num_uniform_others>0?num_uniform_others:1);
+    int num_uniform = num_uniform_others + has_tourney; // за съвместимост
     if(dyn_panel_h<90) dyn_panel_h=90;   /* CAPTURED needs ~90 for 2 rows of pieces */
     if(dyn_panel_h>220) dyn_panel_h=220; /* keep panels sane on very tall windows */
     int sy=MENU_H+8;
@@ -3012,10 +3013,10 @@ static void draw_sidebar(int mx,int my){
         }
     sy+=cap_h+6;
 
-    /* Tournament scoreboard — uniform */
+    /* Tournament scoreboard — компактен, за да има повече място за графиката */
     if(tourney_active||tourney_played>0){
-        frect(FRAME_W+4,sy,sw-8,dyn_panel_h,0,0,0);
-        orect(FRAME_W+4,sy,sw-8,dyn_panel_h,100,180,220);
+        frect(FRAME_W+4,sy,sw-8,tourney_h,0,0,0);
+        orect(FRAME_W+4,sy,sw-8,tourney_h,100,180,220);
         dtxt(FRAME_W+9,sy+7,"TOURNAMENT",1,0,0,0);
         dtxt(FRAME_W+8,sy+6,"TOURNAMENT",1,100,180,220);
         if(tourney_is_rr){
@@ -3044,7 +3045,7 @@ static void draw_sidebar(int mx,int my){
                 dtxt(FRAME_W+8,sy+40,"CMD uniform panel",1,90,90,90);
             }
         }
-        sy+=dyn_panel_h+6;
+        sy+=tourney_h+6;
     }
 
     /* v13: Per-engine analysis panels with names — separate for each engine */
