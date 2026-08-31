@@ -4371,7 +4371,7 @@ static void load_pgn(void){
         }
     }
     free(buf);
-    sprintf(msg,"Loaded %d moves from %s",move_count,fname);
+    sprintf(msg,"Loaded %d moves from %s",move_count,fname);SDL_SetWindowTitle(win,msg);
 
     /* Setup replay */
     pgn_replay_mode = 1;
@@ -4386,10 +4386,10 @@ static void load_pgn(void){
 
 /* ===================== PGN REPLAY ===================== */
 static void pgn_replay_prev(void){
-    if(!pgn_replay_mode || pgn_replay_index<=0){sprintf(msg,"Replay OFF (mode=%d idx=%d)",pgn_replay_mode,pgn_replay_index);return;}
+    if(!pgn_replay_mode || pgn_replay_index<=0){sprintf(msg,"REPLAY: prev skipped mode=%d idx=%d",pgn_replay_mode,pgn_replay_index);SDL_SetWindowTitle(win,msg);return;}
     do_undo();
     pgn_replay_index--;
-    sprintf(msg,"Replay %d/%d",pgn_replay_index,pgn_replay_move_count);
+    sprintf(msg,"REPLAY: prev ok idx=%d/%d",pgn_replay_index,pgn_replay_move_count);SDL_SetWindowTitle(win,msg);
 }
 
 static void pgn_replay_next(void){
@@ -4397,7 +4397,7 @@ static void pgn_replay_next(void){
     do_move_full(&pgn_replay_moves[pgn_replay_index]);
     turn=-turn;
     pgn_replay_index++;
-    sprintf(msg,"Replay %d/%d",pgn_replay_index,pgn_replay_move_count);
+    sprintf(msg,"REPLAY: next ok idx=%d/%d",pgn_replay_index,pgn_replay_move_count);SDL_SetWindowTitle(win,msg);
 }
 
 static void pgn_replay_first(void){
