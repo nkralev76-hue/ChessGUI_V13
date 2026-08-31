@@ -2154,13 +2154,14 @@ static const char*menu_item(int mi,int ii){
 }
 static void draw_menus(int mx,int my){
     // v14.4: по-красиво меню — градиент и оранжев акцент
+    int menu_w = real_w>0?real_w:WIN_W;
     for(int i=0;i<MENU_H;i++){
         int c = 10 + i*10/MENU_H;
         SDL_SetRenderDrawColor(ren,c,c,c+4,255);
-        SDL_RenderDrawLine(ren,0,i,WIN_W,i);
+        SDL_RenderDrawLine(ren,0,i,menu_w,i);
     }
-    SDL_SetRenderDrawColor(ren,255,165,0,255); SDL_RenderDrawLine(ren,0,MENU_H-1,WIN_W,MENU_H-1);
-    SDL_SetRenderDrawColor(ren,60,60,70,255); SDL_RenderDrawLine(ren,0,MENU_H-2,WIN_W,MENU_H-2);
+    SDL_SetRenderDrawColor(ren,255,165,0,255); SDL_RenderDrawLine(ren,0,MENU_H-1,menu_w,MENU_H-1);
+    SDL_SetRenderDrawColor(ren,60,60,70,255); SDL_RenderDrawLine(ren,0,MENU_H-2,menu_w,MENU_H-2);
     if(!ai_thinking){int tw=(int)(strlen(msg)*9*UI_TEXT_SCALE);if(tw<WIN_W-200)dtxt_raw(WIN_W-tw-4,14,msg,1,130,130,160);}
     int mw=120,mx0=4,gap=4;
     for(int mi=0;mi<N_MENUS;mi++){
