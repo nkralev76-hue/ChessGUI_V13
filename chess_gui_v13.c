@@ -4282,7 +4282,8 @@ static void load_pgn(void){
     else p=buf; /* no tags — start from beginning */
 
     stop_ai(); stop_analysis(); stop_pondering();
-    turn=WHITE; hist_n=0; game_over=0; draw_offered=0;
+    init_board();
+    turn=WHITE;
 
     /* parse move tokens */
     int move_count=0;
