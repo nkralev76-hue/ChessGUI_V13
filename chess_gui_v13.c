@@ -2069,10 +2069,10 @@ static int promo_click(int mx,int my){
 static const char*MNAME[N_MENUS]={"Game","Settings","Engine","Tournament","Options","Help"};
 static const char*GITEMS[]={
     "New game (White)","New game (Black)","AI vs AI",
-    "Load FEN  (L)","Paste FEN (Ctrl+V)","Undo move (U)",
+    "Load FEN  (L)","Load PGN","Paste FEN (Ctrl+V)","Undo move (U)",
     "Draw offer","Resign","Save PGN"
 };
-#define N_GAME 9
+#define N_GAME 10
 static const char*SITEMS[]={
     "Sound on/off  (M)",
     "Flip board  (F)",
@@ -2253,6 +2253,7 @@ static void draw_menus(int mx,int my){
 static void do_undo(void);
 static void do_move_full(Move *m);
 static void save_pgn(void);
+static void load_pgn(void);
 static void stop_ai(void);
 static void start_pondering(void);
 static void start_ai_move(void);
@@ -2395,6 +2396,7 @@ static void handle_menu(int mx,int my){
                     else if(ii==6){draw_offered=1;sprintf(msg,"Draw offered");SDL_SetWindowTitle(win,msg);}
                     else if(ii==7){game_over=1;strcpy(msg,player_color==WHITE?"You resign":"Computer wins");stop_analysis();stop_pondering();stop_ai();}
                     else if(ii==8) save_pgn();
+                    else if(ii==9) load_pgn();
                 }
                 if(mi==1){
                     if(ii==0)sound_on=!sound_on;
@@ -4208,6 +4210,142 @@ static void save_pgn(void){
     fprintf(f,"*\n");
     fclose(f);
     strcpy(msg,"Saved: chess_game.pgn");
+}
+
+/* ===================== LOAD PGN ===================== */
+static void load_pgn(void){
+    OPENFILENAMEA ofn={0};
+    char fname[260]="";
+    ofn.lStructSize=sizeof(ofn);
+    ofn.hwndOwner=NULL;
+    ofn.lpstrFile=fname;
+    ofn.nMaxFile=260;
+    ofn.lpstrFilter="PGN Files\0*.pgn\0All Files\0*.*\0";
+    ofn.nFilterIndex=1;
+    ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
+    if(!GetOpenFileNameA(&ofn)) return;
+
+    FILE *f=fopen(fname,"r");
+    if(!f){ strcpy(msg,"Failed to open PGN"); return; }
+
+    fseek(f,0,SEEK_END);
+    long sz=ftell(f);
+    fseek(f,0,SEEK_SET);
+    char *buf=malloc(sz+1);
+    if(!buf){ fclose(f); strcpy(msg,"Out of memory"); return; }
+    fread(buf,1,sz,f);
+    buf[sz]=0;
+    fclose(f);
+
+    /* skip PGN tags (lines starting with [) */
+    char *p=buf;
+    while(*p && *p!='\n' && (*p=='[' || *p=='\r')) p++;
+
+    /* skip to first move number like 1. or 1. */
+    char *movestart=strstr(buf,"1.");
+    if(!movestart){ free(buf); strcpy(msg,"No moves found in PGN"); return; }
+    p=movestart;
+
+    stop_ai(); stop_analysis(); stop_pondering();
+
+    /* parse move tokens */
+    int move_count=0;
+    while(*p){
+        /* skip move numbers like "1." "2." "12..." */
+        if(*p>='1' && *p<='9'){
+            char *dot=p;
+            while(*dot && *dot>='0' && *dot<='9') dot++;
+            if(*dot=='.'){ p=dot+1; continue; }
+        }
+        /* skip whitespace */
+        if(*p==' ' || *p=='\n' || *p=='\r' || *p=='\t'){ p++; continue; }
+
+        /* end markers */
+        if(*p=='1' && *(p+1)=='-' && *(p+2)=='0'){ break; }
+        if(*p=='0' && *(p+1)=='-' && *(p+2)=='1'){ break; }
+        if(*p=='1' && *(p+1)=='/' && *(p+2)=='2'){ break; }
+        if(*p=='*'){ break; }
+
+        /* extract one token (SAN move) */
+        char token[32]="";
+        int ti=0;
+        while(*p && *p!=' ' && *p!='\n' && *p!='\r' && *p!='\t' && ti<30){
+            token[ti++]=*p++;
+        }
+        token[ti]=0;
+        if(ti==0) continue;
+
+        /* find matching legal move by generating SAN for each and comparing */
+        int col_idx=(turn==WHITE)?WC:BC;
+        Move all_moves[256];
+        int n=bb_gen_moves(&B,col_idx,all_moves);
+        int found=0;
+        for(int i=0;i<n;i++){
+            /* check legality on a copy */
+            BBoard bc;memcpy(&bc,&B,sizeof bc);
+            bb_do(&bc,&all_moves[i],col_idx);
+            if(bb_inchk(&bc,col_idx)) continue;
+
+            /* generate SAN for this move */
+            char san[32]="";
+            int pt=abs(bb_piece_at_rc(&B,all_moves[i].fr,all_moves[i].fc));
+            int is_cap=(all_moves[i].cap!=0) || (all_moves[i].ep_cap>=0);
+            if(all_moves[i].castle==1||all_moves[i].castle==3) strcpy(san,"O-O");
+            else if(all_moves[i].castle==2||all_moves[i].castle==4) strcpy(san,"O-O-O");
+            else{
+                if(pt==PAWN){
+                    if(is_cap){san[0]=(char)('a'+all_moves[i].fc);san[1]='x';san[2]=(char)('0'+(8-all_moves[i].tr));san[3]=(char)('a'+all_moves[i].tc);san[4]=0;}
+                    else{san[0]=(char)('a'+all_moves[i].tc);san[1]=(char)('0'+(8-all_moves[i].tr));san[2]=0;}
+                    if(all_moves[i].promo){
+                        san[strlen(san)]='=';
+                        san[strlen(san)+1]=" PNBRQK"[all_moves[i].promo];
+                        san[strlen(san)+2]=0;
+                    }
+                } else {
+                    const char *pn=" PNBRQK";
+                    san[0]=pn[pt];
+                    san[1]=0;
+                    /* disambiguation: check if other pieces of same type can reach same square */
+                    int need_file=0,need_rank=0;
+                    for(int j=0;j<n;j++){
+                        if(j==i) continue;
+                        if(all_moves[j].tr==all_moves[i].tr && all_moves[j].tc==all_moves[i].tc) continue;
+                        if(all_moves[j].tr!=all_moves[i].tr || all_moves[j].tc!=all_moves[i].tc) continue;
+                        if(abs(bb_piece_at_rc(&B,all_moves[j].fr,all_moves[j].fc))!=pt) continue;
+                        BBoard bc2;memcpy(&bc2,&B,sizeof bc2);
+                        bb_do(&bc2,&all_moves[j],col_idx);
+                        if(bb_inchk(&bc2,col_idx)) continue;
+                        if(all_moves[j].fc!=all_moves[i].fc) need_file=1;
+                        else if(all_moves[j].fr!=all_moves[i].fr) need_rank=1;
+                        else { need_file=1; need_rank=1; }
+                    }
+                    int slen=(int)strlen(san);
+                    if(need_file){san[slen]=(char)('a'+all_moves[i].fc);san[slen+1]=0;slen++;}
+                    if(need_rank){san[slen]=(char)('0'+(8-all_moves[i].fr));san[slen+1]=0;slen++;}
+                    if(is_cap){san[slen]='x';san[slen+1]=0;slen++;}
+                    san[slen]=(char)('a'+all_moves[i].tc);san[slen+1]=(char)('0'+(8-all_moves[i].tr));san[slen+2]=0;
+                }
+            }
+            /* compare SAN with token (ignoring +/-/# at end) */
+            char tok_clean[32]="";
+            int tc=0;
+            for(int k=0;token[k];k++) if(token[k]!='+' && token[k]!='#') tok_clean[tc++]=token[k];
+            tok_clean[tc]=0;
+            if(strcmp(san,tok_clean)==0){
+                do_move_full(&all_moves[i]);
+                move_count++;
+                found=1;
+                break;
+            }
+        }
+        if(!found){
+            free(buf);
+            sprintf(msg,"Parse error: %s",token);
+            return;
+        }
+    }
+    free(buf);
+    sprintf(msg,"Loaded %d moves from %s",move_count,fname);
 }
 
 /* ===================== v10: UCI ENGINE SUBSYSTEM ===================== */
