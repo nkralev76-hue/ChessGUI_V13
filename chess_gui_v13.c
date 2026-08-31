@@ -4258,9 +4258,7 @@ static void load_pgn(void){
     else p=buf; /* no tags — start from beginning */
 
     stop_ai(); stop_analysis(); stop_pondering();
-    init_board(); player_color=WHITE; aivsai=0;
-    hist_n=0; game_over=0; game_start_fen[0]=0;
-    for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
+    turn=WHITE; hist_n=0; game_over=0; draw_offered=0;
 
     /* parse move tokens */
     int move_count=0;
