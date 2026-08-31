@@ -1966,8 +1966,7 @@ static void px2sq(int mx,int my,int*r,int*c){
 static void draw_piece_at(int piece,int row,int col){
     int wh=(piece>0),tp=abs(piece);
     int px,py; sq2px(row,col,&px,&py);
-    // добре изрисувани — винаги лека сянка
-    if(1){
+    if(0){
         SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(ren,0,0,0,45);
         int cx=px+SQ_SIZE/2, cy=py+SQ_SIZE - 8;
@@ -1997,7 +1996,7 @@ static void draw_piece_at(int piece,int row,int col){
 static void draw_piece_px(int piece,int px,int py){
     if(piece==0) return;
     int wh=(piece>0),tp=abs(piece);
-    if(1){
+    if(0){
         SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(ren,0,0,0,45);
         int cx=px+SQ_SIZE/2, cy=py+SQ_SIZE - 8;
