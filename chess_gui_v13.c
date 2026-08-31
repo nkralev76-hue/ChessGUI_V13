@@ -1932,19 +1932,16 @@ static const unsigned char PF[128][9]={
 static void dtxt(int x,int y,const char*t,int sc,int R,int Gv,int B){
     SDL_SetRenderDrawColor(ren,R,Gv,B,255);
     double eff = sc * UI_TEXT_SCALE;
+    int eff_i = (int)ceil(eff);
+    if(eff_i<1) eff_i=1;
     for(int ci=0;t[ci];ci++){unsigned char ch=(unsigned char)t[ci];if(ch>127)continue;
-        double base_x = x + ci * 9 * eff;
+        int base_x = x + (int)round(ci * 9 * eff);
         for(int row=0;row<9;row++)for(int bit=0;bit<8;bit++)
             if(PF[ch][row]&(0x80>>bit)){
-                float fx = (float)(base_x + bit*eff);
-                float fy = (float)(y + row*eff);
-                float fw = (float)eff;
-                float fh = (float)eff;
-#if SDL_VERSION_ATLEAST(2,0,10)
-                SDL_FRect fr={fx,fy,fw,fh}; SDL_RenderFillRectF(ren,&fr);
-#else
-                SDL_Rect ir={(int)round(fx),(int)round(fy),(int)ceil(fw),(int)ceil(fh)}; SDL_RenderFillRect(ren,&ir);
-#endif
+                int px = base_x + (int)round(bit*eff);
+                int py = y + (int)round(row*eff);
+                SDL_Rect r={px,py,eff_i,eff_i};
+                SDL_RenderFillRect(ren,&r);
             }
     }
 }
