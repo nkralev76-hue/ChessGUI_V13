@@ -5399,7 +5399,7 @@ static void draw_uci_options_dialog(void){
     dtxt_raw(dx+13,dy+10,title,1,255,240,200);
     /* engine tab switcher — pill style */
     for(int t=0;t<2;t++){
-        int tx=dx+dw-160+t*74,ty=dy+7,tw=68,th=22;
+        int tx=dx+dw-190+t*74,ty=dy+7,tw=68,th=22;
         int act=(t==ei);
         if(act){ frect(tx,ty,tw,th,255,165,0); orect(tx,ty,tw,th,255,200,80); }
         else { frect(tx,ty,tw,th,45,45,55); orect(tx,ty,tw,th,80,80,95); }
