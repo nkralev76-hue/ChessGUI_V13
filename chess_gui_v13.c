@@ -2374,7 +2374,8 @@ static void handle_menu(int mx,int my){
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"AI vs AI");}
                     else if(ii==3){open_menu=-1;fen_dialog_active=1;fen_dialog_buf[0]=0;fen_dialog_len=0;SDL_StartTextInput();}
-                    else if(ii==4){
+                    else if(ii==4) load_pgn();
+                    else if(ii==5){
                         char *clip = SDL_GetClipboardText();
                         if(clip && strlen(clip)>10){
                             char tmp[256]; strncpy(tmp,clip,255); tmp[255]=0;
@@ -2392,11 +2393,10 @@ static void handle_menu(int mx,int my){
                             } else strcpy(msg,"Invalid FEN in clipboard!");
                         } else { if(clip) SDL_free(clip); strcpy(msg,"Clipboard empty!"); }
                     }
-                    else if(ii==5){stop_pondering();if(!ai_thinking){do_undo();if(hist_n>0&&turn!=player_color)do_undo();}}
-                    else if(ii==6){draw_offered=1;sprintf(msg,"Draw offered");SDL_SetWindowTitle(win,msg);}
-                    else if(ii==7){game_over=1;strcpy(msg,player_color==WHITE?"You resign":"Computer wins");stop_analysis();stop_pondering();stop_ai();}
-                    else if(ii==8) save_pgn();
-                    else if(ii==9) load_pgn();
+                    else if(ii==6){stop_pondering();if(!ai_thinking){do_undo();if(hist_n>0&&turn!=player_color)do_undo();}}
+                    else if(ii==7){draw_offered=1;sprintf(msg,"Draw offered");SDL_SetWindowTitle(win,msg);}
+                    else if(ii==8){game_over=1;strcpy(msg,player_color==WHITE?"You resign":"Computer wins");stop_analysis();stop_pondering();stop_ai();}
+                    else if(ii==9) save_pgn();
                 }
                 if(mi==1){
                     if(ii==0)sound_on=!sound_on;
