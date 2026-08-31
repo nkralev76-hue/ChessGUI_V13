@@ -4358,6 +4358,7 @@ static void load_pgn(void){
             tok_clean[tc]=0;
             if(strcmp(san,tok_clean)==0){
                 do_move_full(&all_moves[i]);
+                turn=-turn;
                 move_count++;
                 found=1;
                 break;
