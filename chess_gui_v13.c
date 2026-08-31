@@ -4156,8 +4156,20 @@ static void start_pondering(void) {
 
 /* ===================== SAVE PGN ===================== */
 static void save_pgn(void){
-    FILE *f=fopen("chess_game.pgn","w");
-    if(!f)return;
+    OPENFILENAMEA ofn={0};
+    char fname[260]="chess_game.pgn";
+    ofn.lStructSize=sizeof(ofn);
+    ofn.hwndOwner=NULL;
+    ofn.lpstrFile=fname;
+    ofn.nMaxFile=260;
+    ofn.lpstrFilter="PGN Files\0*.pgn\0All Files\0*.*\0";
+    ofn.nFilterIndex=1;
+    ofn.lpstrTitle="Save PGN";
+    ofn.Flags=OFN_OVERWRITEPROMPT|OFN_NOCHANGEDIR;
+    if(!GetSaveFileNameA(&ofn)) return;
+
+    FILE *f=fopen(fname,"w");
+    if(!f){ sprintf(msg,"Failed to save: %s",fname); return; }
     time_t t=time(NULL);struct tm *tm2=localtime(&t);
     fprintf(f,"[Event \"Casual Game\"]\n");
     fprintf(f,"[Site \"Chess\"]\n");
@@ -4232,7 +4244,7 @@ static void save_pgn(void){
     if(hist_n%2==1) fprintf(f,"\n");
     fprintf(f,"*\n");
     fclose(f);
-    strcpy(msg,"Saved: chess_game.pgn");
+    sprintf(msg,"Saved: %s",fname);
 }
 
 /* ===================== LOAD PGN ===================== */
