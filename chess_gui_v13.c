@@ -508,7 +508,7 @@ static void load_pieces(void){
     for(int c=0;c<2;c++)for(int t=1;t<=6;t++){
         char p[128];sprintf(p,"pieces/%s%s.png",cl[c],nm[t]);
         SDL_Surface*s=IMG_Load(p);
-        if(s){tex[c][t]=SDL_CreateTextureFromSurface(ren,s);SDL_FreeSurface(s);}
+        if(s){tex[c][t]=SDL_CreateTextureFromSurface(ren,s);SDL_SetTextureScaleMode(tex[c][t], SDL_ScaleModeNearest);SDL_FreeSurface(s);}
         else tex[c][t]=NULL;
     }
 }
