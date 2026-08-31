@@ -213,6 +213,11 @@ int cap_w[7],cap_b[7];
 typedef struct { Move m; BBoard bb; int turn; uint64_t hash; } Hist;
 #define MAX_HIST 400
 Hist hist[MAX_HIST];int hist_n=0;
+/* PGN replay */
+static int pgn_replay_mode=0;
+static int pgn_replay_index=0;
+static Move *pgn_replay_moves=NULL;
+static int pgn_replay_move_count=0;
 int open_menu=-1;
 
 /* v12: slide animation for moved pieces */
@@ -2070,9 +2075,10 @@ static const char*MNAME[N_MENUS]={"Game","Settings","Engine","Tournament","Optio
 static const char*GITEMS[]={
     "New game (White)","New game (Black)","AI vs AI",
     "Load FEN  (L)","Load PGN","Paste FEN (Ctrl+V)","Undo move (U)",
-    "Draw offer","Resign","Save PGN"
+    "Draw offer","Resign","Save PGN",
+    "Replay: Prev (Left)","Replay: Next (Right)","Replay: First (Home)","Replay: Last (End)"
 };
-#define N_GAME 10
+#define N_GAME 14
 static const char*SITEMS[]={
     "Sound on/off  (M)",
     "Flip board  (F)",
@@ -2254,6 +2260,10 @@ static void do_undo(void);
 static void do_move_full(Move *m);
 static void save_pgn(void);
 static void load_pgn(void);
+static void pgn_replay_prev(void);
+static void pgn_replay_next(void);
+static void pgn_replay_first(void);
+static void pgn_replay_last(void);
 static void stop_ai(void);
 static void start_pondering(void);
 static void start_ai_move(void);
@@ -2397,6 +2407,10 @@ static void handle_menu(int mx,int my){
                     else if(ii==7){draw_offered=1;sprintf(msg,"Draw offered");SDL_SetWindowTitle(win,msg);}
                     else if(ii==8){game_over=1;strcpy(msg,player_color==WHITE?"You resign":"Computer wins");stop_analysis();stop_pondering();stop_ai();}
                     else if(ii==9) save_pgn();
+                    else if(ii==10) pgn_replay_prev();
+                    else if(ii==11) pgn_replay_next();
+                    else if(ii==12) pgn_replay_first();
+                    else if(ii==13) pgn_replay_last();
                 }
                 if(mi==1){
                     if(ii==0)sound_on=!sound_on;
@@ -4356,9 +4370,40 @@ static void load_pgn(void){
     }
     free(buf);
     sprintf(msg,"Loaded %d moves from %s",move_count,fname);
+
+    /* Setup replay */
+    pgn_replay_mode = 1;
+    pgn_replay_index = hist_n;
+    if(pgn_replay_moves) free(pgn_replay_moves);
+    pgn_replay_moves = malloc(hist_n * sizeof(Move));
+    pgn_replay_move_count = hist_n;
+    for(int i=0;i<hist_n;i++) pgn_replay_moves[i]=hist[i].m;
 }
 
 
+
+/* ===================== PGN REPLAY ===================== */
+static void pgn_replay_prev(void){
+    if(!pgn_replay_mode || pgn_replay_index<=0) return;
+    do_undo();
+    pgn_replay_index--;
+}
+
+static void pgn_replay_next(void){
+    if(!pgn_replay_mode || pgn_replay_index>=pgn_replay_move_count) return;
+    do_move_full(&pgn_replay_moves[pgn_replay_index]);
+    pgn_replay_index++;
+}
+
+static void pgn_replay_first(void){
+    if(!pgn_replay_mode) return;
+    while(pgn_replay_index>0) pgn_replay_prev();
+}
+
+static void pgn_replay_last(void){
+    if(!pgn_replay_mode) return;
+    while(pgn_replay_index<pgn_replay_move_count) pgn_replay_next();
+}
 
 /* ===================== v10: UCI ENGINE SUBSYSTEM ===================== */
 
@@ -5837,6 +5882,11 @@ int main(void){
                     if(tourney_active)tourney_stop();
                     else{tourney_total=10;tourney_player[0]=1;tourney_player[1]=2;tourney_start_now();}
                 }
+                /* Replay: arrow keys */
+                if(k==SDLK_LEFT && !ctrl) pgn_replay_prev();
+                if(k==SDLK_RIGHT && !ctrl) pgn_replay_next();
+                if(k==SDLK_HOME && !ctrl) pgn_replay_first();
+                if(k==SDLK_END && !ctrl) pgn_replay_last();
                 /* v8.3.1: I = toggle infinite analysis */
                 if(k==SDLK_i){
                     if(analysis_mode){ stop_analysis(); strcpy(msg,turn==player_color?"Your move":"Analysis stopped"); }
