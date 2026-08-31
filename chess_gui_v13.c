@@ -2132,6 +2132,9 @@ static const char*HITEMS[]={
     "I        Toggle analysis",
     "L        Load position (FEN)",
     "T        Start tournament",
+    "G        Replay all (auto-play)",
+    "Left/Right  Replay prev/next",
+    "Home/End   First/last move",
     "Ctrl+S    Save game as PGN",
     "Y/Ctrl+C Copy FEN (FEN panel)",
     "--- Mouse ---",
@@ -2139,12 +2142,12 @@ static const char*HITEMS[]={
     "Right-drag   Draw arrow",
     "Click FEN panel to copy FEN",
     "--- Menus ---",
-    "Game      New / Load / Save",
+    "Game      New / Load / Replay",
     "Settings  Theme, Time, Ponder",
     "Engine    Add / manage UCI",
     "C         Copy visible tab"
 };
-#define N_HELP 19
+#define N_HELP 22
 static const char*OITEMS[]={
     "Engine 1 options...",
     "Engine 2 options...",
