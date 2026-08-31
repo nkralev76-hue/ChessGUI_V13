@@ -4258,6 +4258,9 @@ static void load_pgn(void){
     else p=buf; /* no tags — start from beginning */
 
     stop_ai(); stop_analysis(); stop_pondering();
+    init_board(); player_color=WHITE; aivsai=0;
+    hist_n=0; game_over=0; game_start_fen[0]=0;
+    for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
 
     /* parse move tokens */
     int move_count=0;
@@ -6089,7 +6092,7 @@ int main(void){
         if(ponder_running&&(turn!=player_color||aivsai)){stop_pondering();}
         render(mx,my);
         if(!game_over&&!promo_pending){
-            if(!aivsai&&turn!=player_color&&!ai_thinking&&!ai_done&&ponder_ready){
+            if(!aivsai&&turn!=player_color&&!ai_thinking&&!ai_done&&ponder_ready&&!pgn_replay_mode){
                 if(hist_n>0){
                     Move *last_move=&hist[hist_n-1].m;
                     if(moves_equal(last_move,&ponder_opp_move)){
@@ -6106,7 +6109,7 @@ int main(void){
                 }
                 stop_pondering();
             }
-            if(aivsai||turn!=player_color){
+            if((aivsai||turn!=player_color) && !pgn_replay_mode){
                 if(!ai_thinking&&!ai_done)start_ai_move();
                 if(ai_done){ai_done=0;ai_is_ponder=0;apply_ai();}
             }
