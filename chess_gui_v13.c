@@ -1966,8 +1966,8 @@ static void px2sq(int mx,int my,int*r,int*c){
 static void draw_piece_at(int piece,int row,int col){
     int wh=(piece>0),tp=abs(piece);
     int px,py; sq2px(row,col,&px,&py);
-    /* v13: soft retro shadow under piece */
-    if(piece_shadows){
+    // добре изрисувани — винаги лека сянка
+    if(1){
         SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(ren,0,0,0,45);
         int cx=px+SQ_SIZE/2, cy=py+SQ_SIZE - 8;
@@ -1985,7 +1985,7 @@ static void draw_piece_at(int piece,int row,int col){
         SDL_RenderFillRect(ren,&sh);
     }
     if(tex[wh?1:0][tp]){
-        SDL_Rect d={px+5,py+5,SQ_SIZE-10,SQ_SIZE-10};
+        SDL_Rect d={px+4,py+4,SQ_SIZE-8,SQ_SIZE-8};
         SDL_RenderCopy(ren,tex[wh?1:0][tp],NULL,&d);
     } else {
         fcircle(px+SQ_SIZE/2,py+SQ_SIZE/2,SQ_SIZE/2-8, wh?80:10,wh?60:10,wh?30:10);
@@ -1997,7 +1997,7 @@ static void draw_piece_at(int piece,int row,int col){
 static void draw_piece_px(int piece,int px,int py){
     if(piece==0) return;
     int wh=(piece>0),tp=abs(piece);
-    if(piece_shadows){
+    if(1){
         SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(ren,0,0,0,45);
         int cx=px+SQ_SIZE/2, cy=py+SQ_SIZE - 8;
@@ -2009,7 +2009,7 @@ static void draw_piece_px(int piece,int px,int py){
         SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_NONE);
     }
     if(tex[wh?1:0][tp]){
-        SDL_Rect d={px+5,py+5,SQ_SIZE-10,SQ_SIZE-10};
+        SDL_Rect d={px+4,py+4,SQ_SIZE-8,SQ_SIZE-8};
         SDL_RenderCopy(ren,tex[wh?1:0][tp],NULL,&d);
     } else {
         fcircle(px+SQ_SIZE/2,py+SQ_SIZE/2,SQ_SIZE/2-8, wh?80:10,wh?60:10,wh?30:10);
