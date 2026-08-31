@@ -2382,13 +2382,13 @@ static void handle_menu(int mx,int my){
             if(mx>=ix&&mx<ix+iw&&my>=iy2&&my<iy2+ih){
                 open_menu=-1;
                 if(mi==0){
-                    if(ii==0){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    if(ii==0){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"Your move (White)");}
-                    else if(ii==1){stop_analysis();stop_pondering();stop_ai();player_color=BLACK;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    else if(ii==1){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=BLACK;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"Computer thinking...");}
-                    else if(ii==2){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;aivsai=1;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    else if(ii==2){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=WHITE;aivsai=1;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"AI vs AI");}
                     else if(ii==3){open_menu=-1;fen_dialog_active=1;fen_dialog_buf[0]=0;fen_dialog_len=0;SDL_StartTextInput();}
@@ -2398,7 +2398,7 @@ static void handle_menu(int mx,int my){
                         if(clip && strlen(clip)>10){
                             char tmp[256]; strncpy(tmp,clip,255); tmp[255]=0;
                             SDL_free(clip);
-                            stop_analysis();stop_pondering();stop_ai();
+                            stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;
                             if(parse_fen(tmp)){
                                 strncpy(game_start_fen,tmp,255);
                                 hist_n=0;game_hist_n=0;
@@ -5794,7 +5794,7 @@ int main(void){
                         int tlen=strlen(tmp); while(tlen>0 && (tmp[tlen-1]=='\n' || tmp[tlen-1]=='\r' || tmp[tlen-1]==' ' || tmp[tlen-1]=='\t')) tmp[--tlen]=0;
                         char *tstart=tmp; while(*tstart==' '||*tstart=='\t') tstart++;
                         if(strlen(tstart)>10){
-                            stop_analysis();stop_pondering();stop_ai();
+                            stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;
                             if(parse_fen(tstart)){
                                 strncpy(game_start_fen,tstart,255);
                                 hist_n=0;game_hist_n=0;
@@ -5890,7 +5890,7 @@ int main(void){
                     }
                     goto skip_normal_keys;
                 }
-                if(k==SDLK_r){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();game_start_fen[0]=0;
+                if(k==SDLK_r){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();game_start_fen[0]=0;
                     /* v10 FIX: ucinewgame on new game */
                     for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                     strcpy(msg,"Your move (White)");}
