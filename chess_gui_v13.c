@@ -218,6 +218,9 @@ static int pgn_replay_mode=0;
 static int pgn_replay_index=0;
 static Move *pgn_replay_moves=NULL;
 static int pgn_replay_move_count=0;
+static int pgn_replay_auto=0;
+static Uint32 pgn_replay_auto_last=0;
+#define PGN_REPLAY_DELAY 700
 int open_menu=-1;
 
 /* v12: slide animation for moved pieces */
@@ -2076,9 +2079,10 @@ static const char*GITEMS[]={
     "New game (White)","New game (Black)","AI vs AI",
     "Load FEN  (L)","Load PGN","Paste FEN (Ctrl+V)","Undo move (U)",
     "Draw offer","Resign","Save PGN",
-    "Replay: Prev (Left)","Replay: Next (Right)","Replay: First (Home)","Replay: Last (End)"
+    "Replay: Prev (Left)","Replay: Next (Right)","Replay: First (Home)","Replay: Last (End)",
+    "Replay All (G)"
 };
-#define N_GAME 14
+#define N_GAME 15
 static const char*SITEMS[]={
     "Sound on/off  (M)",
     "Flip board  (F)",
@@ -2264,6 +2268,7 @@ static void pgn_replay_prev(void);
 static void pgn_replay_next(void);
 static void pgn_replay_first(void);
 static void pgn_replay_last(void);
+static void pgn_replay_auto_play(void);
 static void stop_ai(void);
 static void start_pondering(void);
 static void start_ai_move(void);
@@ -2411,6 +2416,7 @@ static void handle_menu(int mx,int my){
                     else if(ii==11) pgn_replay_next();
                     else if(ii==12) pgn_replay_first();
                     else if(ii==13) pgn_replay_last();
+                    else if(ii==14) pgn_replay_auto_play();
                 }
                 if(mi==1){
                     if(ii==0)sound_on=!sound_on;
@@ -4410,6 +4416,19 @@ static void pgn_replay_last(void){
     while(pgn_replay_index<pgn_replay_move_count) pgn_replay_next();
 }
 
+static void pgn_replay_auto_play(void){
+    if(!pgn_replay_mode){sprintf(msg,"No PGN loaded");return;}
+    if(pgn_replay_auto){
+        pgn_replay_auto=0;
+        sprintf(msg,"Replay stopped");SDL_SetWindowTitle(win,msg);
+    } else {
+        pgn_replay_first();
+        pgn_replay_auto=1;
+        pgn_replay_auto_last=SDL_GetTicks();
+        sprintf(msg,"Replaying...");SDL_SetWindowTitle(win,msg);
+    }
+}
+
 /* ===================== v10: UCI ENGINE SUBSYSTEM ===================== */
 
 /* UCI protocol debug log — v12.6: writes every line sent to / received from
@@ -5876,7 +5895,7 @@ int main(void){
                 if(k==SDLK_f)flip_board=!flip_board;
                 if(k==SDLK_m)sound_on=!sound_on;
                 if(ctrl&&k==SDLK_s)save_pgn();
-                if(k==SDLK_ESCAPE){open_menu=-1;}
+                if(k==SDLK_ESCAPE){open_menu=-1;pgn_replay_auto=0;}
                 if(k==SDLK_a&&!ctrl)arrow_count=0;
                 /* v9: L = load FEN */
                 if(k==SDLK_l&&!ctrl){
@@ -5888,10 +5907,11 @@ int main(void){
                     else{tourney_total=10;tourney_player[0]=1;tourney_player[1]=2;tourney_start_now();}
                 }
                 /* Replay: arrow keys */
-                if(k==SDLK_LEFT && !ctrl) pgn_replay_prev();
-                if(k==SDLK_RIGHT && !ctrl) pgn_replay_next();
-                if(k==SDLK_HOME && !ctrl) pgn_replay_first();
-                if(k==SDLK_END && !ctrl) pgn_replay_last();
+                if(k==SDLK_LEFT && !ctrl){pgn_replay_auto=0;pgn_replay_prev();}
+                if(k==SDLK_RIGHT && !ctrl){pgn_replay_auto=0;pgn_replay_next();}
+                if(k==SDLK_HOME && !ctrl){pgn_replay_auto=0;pgn_replay_first();}
+                if(k==SDLK_END && !ctrl){pgn_replay_auto=0;pgn_replay_last();}
+                if(k==SDLK_g && !ctrl) pgn_replay_auto_play();
                 /* v8.3.1: I = toggle infinite analysis */
                 if(k==SDLK_i){
                     if(analysis_mode){ stop_analysis(); strcpy(msg,turn==player_color?"Your move":"Analysis stopped"); }
@@ -6091,6 +6111,21 @@ int main(void){
             }
         }
         SDL_SetRenderDrawColor(ren,0,0,0,255);SDL_RenderClear(ren);
+        if(pgn_replay_auto && pgn_replay_mode && pgn_replay_index<pgn_replay_move_count){
+            Uint32 now=SDL_GetTicks();
+            if(now-pgn_replay_auto_last>=PGN_REPLAY_DELAY){
+                pgn_replay_next();
+                pgn_replay_auto_last=now;
+                if(pgn_replay_index>=pgn_replay_move_count){
+                    pgn_replay_auto=0;
+                    sprintf(msg,"Replay finished");SDL_SetWindowTitle(win,msg);
+                }
+            }
+        }
+        if(pgn_replay_auto && pgn_replay_mode && pgn_replay_index>=pgn_replay_move_count){
+            pgn_replay_auto=0;
+            sprintf(msg,"Replay finished");SDL_SetWindowTitle(win,msg);
+        }
         if(ponder_running&&(turn!=player_color||aivsai)){stop_pondering();}
         render(mx,my);
         if(!game_over&&!promo_pending){
