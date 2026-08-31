@@ -5771,7 +5771,7 @@ int main(void){
                     if(cmx>=dx+dw-28&&cmx<=dx+dw-6&&cmy>=dy+6&&cmy<=dy+28){ uci_opts_dialog_active=0; goto skip; }
                     /* engine tabs */
                     for(int t=0;t<2;t++){
-                        int tx=dx+dw-150+t*70,ty=dy+6,tw=64,th=24;
+                        int tx=dx+dw-190+t*74,ty=dy+7,tw=68,th=22;
                         if(cmx>=tx&&cmx<=tx+tw&&cmy>=ty&&cmy<=ty+th){ options_engine=t; options_scroll=0; goto skip; }
                     }
                     /* option rows */
