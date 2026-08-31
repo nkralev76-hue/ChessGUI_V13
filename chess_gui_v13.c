@@ -4237,14 +4237,11 @@ static void load_pgn(void){
     buf[sz]=0;
     fclose(f);
 
-    /* skip PGN tags (lines starting with [) */
+    /* skip PGN tags and find the move section (after last ] line) */
     char *p=buf;
-    while(*p && *p!='\n' && (*p=='[' || *p=='\r')) p++;
-
-    /* skip to first move number like 1. or 1. */
-    char *movestart=strstr(buf,"1.");
-    if(!movestart){ free(buf); strcpy(msg,"No moves found in PGN"); return; }
-    p=movestart;
+    char *last_tag=strrchr(buf,']');
+    if(last_tag) p=last_tag+1;
+    else p=buf; /* no tags — start from beginning */
 
     stop_ai(); stop_analysis(); stop_pondering();
 
@@ -4294,22 +4291,34 @@ static void load_pgn(void){
             else if(all_moves[i].castle==2||all_moves[i].castle==4) strcpy(san,"O-O-O");
             else{
                 if(pt==PAWN){
-                    if(is_cap){san[0]=(char)('a'+all_moves[i].fc);san[1]='x';san[2]=(char)('0'+(8-all_moves[i].tr));san[3]=(char)('a'+all_moves[i].tc);san[4]=0;}
-                    else{san[0]=(char)('a'+all_moves[i].tc);san[1]=(char)('0'+(8-all_moves[i].tr));san[2]=0;}
+                    if(is_cap){
+                        int slen=0;
+                        san[slen++]=(char)('a'+all_moves[i].fc);
+                        san[slen++]='x';
+                        san[slen++]=(char)('a'+all_moves[i].tc);
+                        san[slen++]=(char)('0'+(8-all_moves[i].tr));
+                        san[slen]=0;
+                    } else {
+                        int slen=0;
+                        san[slen++]=(char)('a'+all_moves[i].tc);
+                        san[slen++]=(char)('0'+(8-all_moves[i].tr));
+                        san[slen]=0;
+                    }
                     if(all_moves[i].promo){
-                        san[strlen(san)]='=';
-                        san[strlen(san)+1]=" PNBRQK"[all_moves[i].promo];
-                        san[strlen(san)+2]=0;
+                        int slen=(int)strlen(san);
+                        san[slen]='=';
+                        san[slen+1]=" PNBRQK"[all_moves[i].promo];
+                        san[slen+2]=0;
                     }
                 } else {
                     const char *pn=" PNBRQK";
-                    san[0]=pn[pt];
-                    san[1]=0;
+                    int slen=0;
+                    san[slen++]=pn[pt];
+                    san[slen]=0;
                     /* disambiguation: check if other pieces of same type can reach same square */
                     int need_file=0,need_rank=0;
                     for(int j=0;j<n;j++){
                         if(j==i) continue;
-                        if(all_moves[j].tr==all_moves[i].tr && all_moves[j].tc==all_moves[i].tc) continue;
                         if(all_moves[j].tr!=all_moves[i].tr || all_moves[j].tc!=all_moves[i].tc) continue;
                         if(abs(bb_piece_at_rc(&B,all_moves[j].fr,all_moves[j].fc))!=pt) continue;
                         BBoard bc2;memcpy(&bc2,&B,sizeof bc2);
@@ -4319,11 +4328,12 @@ static void load_pgn(void){
                         else if(all_moves[j].fr!=all_moves[i].fr) need_rank=1;
                         else { need_file=1; need_rank=1; }
                     }
-                    int slen=(int)strlen(san);
-                    if(need_file){san[slen]=(char)('a'+all_moves[i].fc);san[slen+1]=0;slen++;}
-                    if(need_rank){san[slen]=(char)('0'+(8-all_moves[i].fr));san[slen+1]=0;slen++;}
-                    if(is_cap){san[slen]='x';san[slen+1]=0;slen++;}
-                    san[slen]=(char)('a'+all_moves[i].tc);san[slen+1]=(char)('0'+(8-all_moves[i].tr));san[slen+2]=0;
+                    if(need_file){san[slen++]=(char)('a'+all_moves[i].fc);}
+                    if(need_rank){san[slen++]=(char)('0'+(8-all_moves[i].fr));}
+                    if(is_cap){san[slen++]='x';}
+                    san[slen++]=(char)('a'+all_moves[i].tc);
+                    san[slen++]=(char)('0'+(8-all_moves[i].tr));
+                    san[slen]=0;
                 }
             }
             /* compare SAN with token (ignoring +/-/# at end) */
@@ -4347,6 +4357,8 @@ static void load_pgn(void){
     free(buf);
     sprintf(msg,"Loaded %d moves from %s",move_count,fname);
 }
+
+
 
 /* ===================== v10: UCI ENGINE SUBSYSTEM ===================== */
 
