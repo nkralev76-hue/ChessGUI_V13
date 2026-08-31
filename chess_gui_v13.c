@@ -4165,7 +4165,7 @@ static void save_pgn(void){
     ofn.lpstrFilter="PGN Files\0*.pgn\0All Files\0*.*\0";
     ofn.nFilterIndex=1;
     ofn.lpstrTitle="Save PGN";
-    ofn.Flags=OFN_OVERWRITEPROMPT|OFN_NOCHANGEDIR;
+    ofn.Flags=OFN_OVERWRITEPROMPT;
     if(!GetSaveFileNameA(&ofn)) return;
 
     FILE *f=fopen(fname,"w");
@@ -4257,7 +4257,7 @@ static void load_pgn(void){
     ofn.nMaxFile=260;
     ofn.lpstrFilter="PGN Files\0*.pgn\0All Files\0*.*\0";
     ofn.nFilterIndex=1;
-    ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
+    ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST;
     if(!GetOpenFileNameA(&ofn)) return;
 
     FILE *f=fopen(fname,"r");
