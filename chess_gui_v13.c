@@ -2486,6 +2486,7 @@ static void handle_menu(int mx,int my){
 #endif
                     }
                     else if(ii==4){
+                        uci_dbg_log("MENU",0,"Reconnect Engine 1 clicked");
                         if(eng_analysis[0].is_thinking) stop_ai();
                         stop_analysis(); stop_pondering();
                         uci_close_engine(0);
@@ -2507,11 +2508,6 @@ static void handle_menu(int mx,int my){
                         stop_analysis(); stop_pondering();
                         uci_close_engine(0);
                         if(active_engine==0){ use_uci_engine=0; active_engine=0; }
-                        if(tourney_active){
-                            if(tourney_player[0]==1) tourney_player[0]=0;
-                            if(tourney_player[1]==1) tourney_player[1]=0;
-                            uci_dbg_log("ENGINE",0,"tournament slot for UCI1 -> built-in (disconnect)");
-                        }
                         strcpy(msg,"UCI Engine 1 disconnected");
                     }
                     else if(ii==7){
@@ -2548,6 +2544,7 @@ static void handle_menu(int mx,int my){
 #endif
                     }
                     else if(ii==8){
+                        uci_dbg_log("MENU",1,"Reconnect Engine 2 clicked");
                         if(eng_analysis[1].is_thinking) stop_ai();
                         stop_analysis(); stop_pondering();
                         uci_close_engine(1);
@@ -2569,11 +2566,6 @@ static void handle_menu(int mx,int my){
                         stop_analysis(); stop_pondering();
                         uci_close_engine(1);
                         if(active_engine==1){ use_uci_engine=0; active_engine=0; }
-                        if(tourney_active){
-                            if(tourney_player[0]==2) tourney_player[0]=0;
-                            if(tourney_player[1]==2) tourney_player[1]=0;
-                            uci_dbg_log("ENGINE",1,"tournament slot for UCI2 -> built-in (disconnect)");
-                        }
                         strcpy(msg,"UCI Engine 2 disconnected");
                     }
                 }
@@ -4615,7 +4607,9 @@ static int uci_spawn_engine(int ei, const char *path){
     si.wShowWindow=SW_HIDE;
     si.hStdInput=chin_r; si.hStdOutput=cout_w; si.hStdError=cout_w;
     PROCESS_INFORMATION pi={0};
-    char cmd[260]; strncpy(cmd,path,259);
+    char cmd[520];
+    if(strchr(path,' ')||strchr(path,'\t')) snprintf(cmd,sizeof(cmd),"\"%s\"",path);
+    else { strncpy(cmd,path,259); cmd[259]=0; }
     if(!CreateProcessA(NULL,cmd,NULL,NULL,TRUE,CREATE_NO_WINDOW,NULL,NULL,&si,&pi)){
         CloseHandle(chin_r);CloseHandle(chin_w);
         CloseHandle(cout_r);CloseHandle(cout_w);
