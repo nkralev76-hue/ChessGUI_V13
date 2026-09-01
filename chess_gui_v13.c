@@ -5389,6 +5389,7 @@ static void tourney_stop(void){
 }
 
 static void tourney_begin_game(void){
+    pgn_replay_mode=0; pgn_replay_auto=0;
     stop_analysis();stop_pondering();stop_ai();
     init_board();turn=WHITE;game_start_fen[0]=0;
     game_over=0;draw_offered=0;
@@ -5476,6 +5477,7 @@ static void tourney_start_round_robin(int mode){
     tourney_rr_num = n;
     for(int i=0;i<n;i++) tourney_rr_players[i]=players[i];
     tourney_build_rr_schedule();
+    pgn_replay_mode=0; pgn_replay_auto=0;
     tourney_active=1; tourney_waiting=0;
     char msg2[128]; snprintf(msg2,sizeof(msg2),"Round Robin %d players, %d games", n, tourney_rr_sched_len);
     bottom_log_push(msg2);
@@ -5487,6 +5489,7 @@ static void tourney_start_round_robin(int mode){
     tourney_begin_game();
 }
 static void tourney_start_now(void){
+    pgn_replay_mode=0; pgn_replay_auto=0;
     tourney_autoset_players();
     tourney_active=1;tourney_played=0;
     tourney_score[0]=tourney_score[1]=0;
