@@ -5228,6 +5228,7 @@ static int uci_ponder_thread_func(void *data){
         }
     }
     uci_ponder_alive=0;
+    if(ei>=0&&ei<MAX_ENGINES) eng_analysis[ei].is_thinking=0;
     return 0;
 }
 
@@ -5252,6 +5253,7 @@ static void start_uci_ponder(int ei){
     uci_ponder_best_set=0; uci_ponder_best.fr=-1;
     uci_ponder_waiting=0;
     uci_ponder_alive=1;
+    eng_analysis[ei].is_thinking=1;
     uci_last_bestmove_ponder[ei].fr=-1; /* consumed */
     SDL_CreateThread(uci_ponder_thread_func,"UCIponder",(void*)(intptr_t)ei);
 }
@@ -5263,6 +5265,7 @@ static void cancel_uci_ponder(void){
     if(pe>=0&&pe<MAX_ENGINES&&uci_eng[pe].ready&&UCI_VALID(pe)) uci_send_raw(pe,"stop");
     int wait=0;
     while(uci_ponder_alive&&wait<400){SDL_Delay(5);wait++;}
+    if(pe>=0&&pe<MAX_ENGINES) eng_analysis[pe].is_thinking=0;
     uci_ponder_ei=-1;
     uci_ponder_waiting=0;
     uci_ponder_best_set=0;
