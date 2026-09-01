@@ -2104,12 +2104,8 @@ static const char*EITEMS[]={
     "Built-in StrongEngine",           /* 1       */
     "--- UCI Engine 1 ---",            /* 2  sep */
     "Browse Engine 1...",              /* 3       */
-    "Reconnect Engine 1",              /* 4       */
-    "Disconnect Engine 1",             /* 5       */
-    "--- UCI Engine 2 ---",            /* 6  sep */
-    "Browse Engine 2...",              /* 7       */
-    "Reconnect Engine 2",              /* 8       */
-    "Disconnect Engine 2",             /* 9       */
+    "--- UCI Engine 2 ---",            /* 4  sep */
+    "Browse Engine 2...",              /* 5       */
 };
 #define N_ENG (sizeof(EITEMS)/sizeof(EITEMS[0]))
 static const char*TITEMS[]={
@@ -2196,7 +2192,7 @@ static void draw_menus(int mx,int my){
                 /* separator rows (header rows starting with ---) */
                 int is_sep = 0;
                 if(mi==1 && (ii==3||ii==12||ii==20||ii==23)) is_sep=1;
-                if(mi==2 && (ii==0||ii==2||ii==6)) is_sep=1;
+                if(mi==2 && (ii==0||ii==2||ii==4)) is_sep=1;
                 if(mi==3 && (ii==0||ii==5||ii==10||ii==15)) is_sep=1;
                 if(is_sep){
                     SDL_SetRenderDrawColor(ren,80,70,50,255);
@@ -2227,9 +2223,7 @@ static void draw_menus(int mx,int my){
                 if(mi==2){
                     if(ii==1&&!use_uci_engine)mk=1;
                     if(ii==3&&use_uci_engine&&uci_eng[0].ready)mk=1;
-                    if(ii==4&&uci_eng[0].ready)mk=1;
-                    if(ii==7&&use_uci_engine&&uci_eng[1].ready)mk=1;
-                    if(ii==8&&uci_eng[1].ready)mk=1;
+                    if(ii==5&&use_uci_engine&&uci_eng[1].ready)mk=1;
                 }
                 if(mi==3){
                     if(ii==1&&tourney_total==2)mk=1;
@@ -2376,7 +2370,7 @@ static void handle_menu(int mx,int my){
             /* skip separator/header rows */
             int is_sep=0;
             if(mi==1&&(ii==3||ii==12||ii==20||ii==23))is_sep=1;
-            if(mi==2&&(ii==0||ii==2||ii==6))is_sep=1;
+            if(mi==2&&(ii==0||ii==2||ii==4))is_sep=1;
             if(mi==3&&(ii==0||ii==5||ii==10||ii==15))is_sep=1;
             if(is_sep) continue;
             if(mx>=ix&&mx<ix+iw&&my>=iy2&&my<iy2+ih){
@@ -2484,30 +2478,7 @@ static void handle_menu(int mx,int my){
                         SDL_StartTextInput();
 #endif
                     }
-                    else if(ii==4){
-                        uci_dbg_log("MENU",0,"Reconnect Engine 1 clicked");
-                        stop_ai(); stop_analysis(); stop_pondering();
-                        uci_close_engine(0);
-                        if(uci_eng[0].path[0]&&uci_spawn_engine(0, uci_eng[0].path)){
-                            uci_eng[0].ready=1; use_uci_engine=1; active_engine=0;
-                            char *nm=strrchr(uci_eng[0].path, '/');
-#ifdef _WIN32
-                            nm=strrchr(uci_eng[0].path, '\\');
-#endif
-                            sprintf(msg,"UCI Engine 1: %s",nm?nm+1:uci_eng[0].path);
-                        } else {
-                            uci_eng[0].ready=0;
-                            if(!uci_eng[0].path[0]) strcpy(msg,"No engine 1 selected");
-                            else sprintf(msg,"UCI Engine 1 failed: %s",uci_eng[0].path);
-                        }
-                    }
                     else if(ii==5){
-                        stop_ai(); stop_analysis(); stop_pondering();
-                        uci_close_engine(0);
-                        if(active_engine==0){ use_uci_engine=0; active_engine=0; }
-                        strcpy(msg,"UCI Engine 1 disconnected");
-                    }
-                    else if(ii==7){
                         open_menu=-1; path_dialog_engine_idx=1;
 #ifdef _WIN32
                         OPENFILENAMEA ofn={0};
@@ -2538,29 +2509,6 @@ static void handle_menu(int mx,int my){
                         path_dialog_len=strlen(path_dialog_buf);
                         SDL_StartTextInput();
 #endif
-                    }
-                    else if(ii==8){
-                        uci_dbg_log("MENU",1,"Reconnect Engine 2 clicked");
-                        stop_ai(); stop_analysis(); stop_pondering();
-                        uci_close_engine(1);
-                        if(uci_eng[1].path[0]&&uci_spawn_engine(1, uci_eng[1].path)){
-                            uci_eng[1].ready=1; use_uci_engine=1; active_engine=1;
-                            char *nm=strrchr(uci_eng[1].path, '/');
-#ifdef _WIN32
-                            nm=strrchr(uci_eng[1].path, '\\');
-#endif
-                            sprintf(msg,"UCI Engine 2: %s",nm?nm+1:uci_eng[1].path);
-                        } else {
-                            uci_eng[1].ready=0;
-                            if(!uci_eng[1].path[0]) strcpy(msg,"No engine 2 selected");
-                            else sprintf(msg,"UCI Engine 2 failed: %s",uci_eng[1].path);
-                        }
-                    }
-                    else if(ii==9){
-                        stop_ai(); stop_analysis(); stop_pondering();
-                        uci_close_engine(1);
-                        if(active_engine==1){ use_uci_engine=0; active_engine=0; }
-                        strcpy(msg,"UCI Engine 2 disconnected");
                     }
                 }
                 if(mi==3){
