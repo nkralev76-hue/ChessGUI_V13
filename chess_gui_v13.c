@@ -2466,8 +2466,7 @@ static void handle_menu(int mx,int my){
                         ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
                         if(GetOpenFileNameA(&ofn)){
                             strncpy(uci_eng[0].path,szFile,255);
-                            if(eng_analysis[0].is_thinking) stop_ai();
-                            stop_analysis(); stop_pondering();
+                            stop_ai(); stop_analysis(); stop_pondering();
                             uci_close_engine(0);
                             if(uci_spawn_engine(0, uci_eng[0].path)){
                                 uci_eng[0].ready=1; use_uci_engine=1; active_engine=0;
@@ -2487,8 +2486,7 @@ static void handle_menu(int mx,int my){
                     }
                     else if(ii==4){
                         uci_dbg_log("MENU",0,"Reconnect Engine 1 clicked");
-                        if(eng_analysis[0].is_thinking) stop_ai();
-                        stop_analysis(); stop_pondering();
+                        stop_ai(); stop_analysis(); stop_pondering();
                         uci_close_engine(0);
                         if(uci_eng[0].path[0]&&uci_spawn_engine(0, uci_eng[0].path)){
                             uci_eng[0].ready=1; use_uci_engine=1; active_engine=0;
@@ -2504,8 +2502,7 @@ static void handle_menu(int mx,int my){
                         }
                     }
                     else if(ii==5){
-                        if(eng_analysis[0].is_thinking) stop_ai();
-                        stop_analysis(); stop_pondering();
+                        stop_ai(); stop_analysis(); stop_pondering();
                         uci_close_engine(0);
                         if(active_engine==0){ use_uci_engine=0; active_engine=0; }
                         strcpy(msg,"UCI Engine 1 disconnected");
@@ -2524,8 +2521,7 @@ static void handle_menu(int mx,int my){
                         ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
                         if(GetOpenFileNameA(&ofn)){
                             strncpy(uci_eng[1].path,szFile,255);
-                            if(eng_analysis[1].is_thinking) stop_ai();
-                            stop_analysis(); stop_pondering();
+                            stop_ai(); stop_analysis(); stop_pondering();
                             uci_close_engine(1);
                             if(uci_spawn_engine(1, uci_eng[1].path)){
                                 uci_eng[1].ready=1; use_uci_engine=1; active_engine=1;
@@ -2545,8 +2541,7 @@ static void handle_menu(int mx,int my){
                     }
                     else if(ii==8){
                         uci_dbg_log("MENU",1,"Reconnect Engine 2 clicked");
-                        if(eng_analysis[1].is_thinking) stop_ai();
-                        stop_analysis(); stop_pondering();
+                        stop_ai(); stop_analysis(); stop_pondering();
                         uci_close_engine(1);
                         if(uci_eng[1].path[0]&&uci_spawn_engine(1, uci_eng[1].path)){
                             uci_eng[1].ready=1; use_uci_engine=1; active_engine=1;
@@ -2562,8 +2557,7 @@ static void handle_menu(int mx,int my){
                         }
                     }
                     else if(ii==9){
-                        if(eng_analysis[1].is_thinking) stop_ai();
-                        stop_analysis(); stop_pondering();
+                        stop_ai(); stop_analysis(); stop_pondering();
                         uci_close_engine(1);
                         if(active_engine==1){ use_uci_engine=0; active_engine=0; }
                         strcpy(msg,"UCI Engine 2 disconnected");
