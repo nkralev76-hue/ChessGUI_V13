@@ -2136,6 +2136,7 @@ static const char*HITEMS[]={
     "--- Mouse ---",
     "Drag piece   Move a piece",
     "Right-drag   Draw arrow",
+    "A          Clear drawn arrows",
     "Click FEN panel to copy FEN",
     "--- Menus ---",
     "Game      New / Load / Replay",
@@ -2143,7 +2144,7 @@ static const char*HITEMS[]={
     "Engine    Add / manage UCI",
     "C         Copy visible tab"
 };
-#define N_HELP 22
+#define N_HELP 23
 static const char*OITEMS[]={
     "Engine 1 options...",
     "Engine 2 options...",
