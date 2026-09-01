@@ -2466,6 +2466,7 @@ static void handle_menu(int mx,int my){
                         ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
                         if(GetOpenFileNameA(&ofn)){
                             strncpy(uci_eng[0].path,szFile,255);
+                            stop_ai(); stop_analysis(); stop_pondering();
                             uci_close_engine(0);
                             if(uci_spawn_engine(0, uci_eng[0].path)){
                                 uci_eng[0].ready=1; use_uci_engine=1; active_engine=0;
@@ -2484,6 +2485,7 @@ static void handle_menu(int mx,int my){
 #endif
                     }
                     else if(ii==4){
+                        stop_ai(); stop_analysis(); stop_pondering();
                         uci_close_engine(0);
                         if(uci_eng[0].path[0]&&uci_spawn_engine(0, uci_eng[0].path)){
                             uci_eng[0].ready=1; use_uci_engine=1; active_engine=0;
@@ -2499,8 +2501,9 @@ static void handle_menu(int mx,int my){
                         }
                     }
                     else if(ii==5){
+                        stop_ai(); stop_analysis(); stop_pondering();
                         uci_close_engine(0);
-                        if(active_engine==0) use_uci_engine=0;
+                        if(active_engine==0){ use_uci_engine=0; active_engine=0; }
                         strcpy(msg,"UCI Engine 1 disconnected");
                     }
                     else if(ii==7){
@@ -2517,9 +2520,10 @@ static void handle_menu(int mx,int my){
                         ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
                         if(GetOpenFileNameA(&ofn)){
                             strncpy(uci_eng[1].path,szFile,255);
+                            stop_ai(); stop_analysis(); stop_pondering();
                             uci_close_engine(1);
                             if(uci_spawn_engine(1, uci_eng[1].path)){
-                                uci_eng[1].ready=1;
+                                uci_eng[1].ready=1; use_uci_engine=1; active_engine=1;
                                 char *nm=strrchr(uci_eng[1].path,'\\');
                                 sprintf(msg,"UCI Engine 2: %s",nm?nm+1:uci_eng[1].path);
                             } else {
@@ -2535,9 +2539,10 @@ static void handle_menu(int mx,int my){
 #endif
                     }
                     else if(ii==8){
+                        stop_ai(); stop_analysis(); stop_pondering();
                         uci_close_engine(1);
                         if(uci_eng[1].path[0]&&uci_spawn_engine(1, uci_eng[1].path)){
-                            uci_eng[1].ready=1;
+                            uci_eng[1].ready=1; use_uci_engine=1; active_engine=1;
                             char *nm=strrchr(uci_eng[1].path, '/');
 #ifdef _WIN32
                             nm=strrchr(uci_eng[1].path, '\\');
@@ -2550,8 +2555,9 @@ static void handle_menu(int mx,int my){
                         }
                     }
                     else if(ii==9){
+                        stop_ai(); stop_analysis(); stop_pondering();
                         uci_close_engine(1);
-                        if(active_engine==1) use_uci_engine=0;
+                        if(active_engine==1){ use_uci_engine=0; active_engine=0; }
                         strcpy(msg,"UCI Engine 2 disconnected");
                     }
                 }
@@ -4603,6 +4609,7 @@ static int uci_spawn_engine(int ei, const char *path){
     CloseHandle(chin_r); CloseHandle(cout_w); CloseHandle(pi.hThread);
     uci_hproc[ei]=pi.hProcess; uci_hin[ei]=chin_w; uci_hout[ei]=cout_r;
     uci_crash_logged[ei]=0;
+    uci_partial_len[ei]=0; uci_partial[ei][0]=0;
     { char m[300]; snprintf(m,sizeof m,"engine started: %s", path); uci_dbg_log("ENGINE", ei, m); }
 
     /* Parse UCI options during handshake */
@@ -4721,6 +4728,7 @@ static void uci_close_engine(int ei){
     }
     if(uci_hin[ei]) {CloseHandle(uci_hin[ei]); uci_hin[ei]=NULL;}
     if(uci_hout[ei]){CloseHandle(uci_hout[ei]);uci_hout[ei]=NULL;}
+    uci_partial_len[ei]=0; uci_partial[ei][0]=0;
     uci_eng[ei].ready=0;
     uci_eng[ei].num_options=0;
 }
