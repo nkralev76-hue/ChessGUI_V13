@@ -2327,8 +2327,16 @@ static void draw_uci_options_dialog(void);
    the engine also run internal PB causes double-thinking and wasted time. */
 static void uci_disable_engine_pb(int ei){
     if(!uci_eng[ei].ready || !UCI_VALID(ei)) return;
-    uci_send_raw(ei, "setoption name Ponder value false");
-    uci_send_raw(ei, "setoption name PermanentBrain value false");
+    const char *v = use_ponder ? "true" : "false";
+    for(int i=0;i<uci_eng[ei].num_options;i++){
+        if(strcmp(uci_eng[ei].options[i].name,"Ponder")==0) uci_eng[ei].options[i].cur_check = use_ponder;
+        if(strcmp(uci_eng[ei].options[i].name,"PermanentBrain")==0) uci_eng[ei].options[i].cur_check = use_ponder;
+    }
+    char cmd[64];
+    snprintf(cmd,sizeof(cmd),"setoption name Ponder value %s",v);
+    uci_send_raw(ei,cmd);
+    snprintf(cmd,sizeof(cmd),"setoption name PermanentBrain value %s",v);
+    uci_send_raw(ei,cmd);
 }
 static void uci_set_book(int ei, int enable){
     if(!uci_eng[ei].ready || !UCI_VALID(ei)) return;
@@ -2436,7 +2444,7 @@ static void handle_menu(int mx,int my){
                     else if(ii==19){base_time=120*60*1000;increment=0;}
                     else if(ii==21){base_time=5*60*1000;increment=3*1000;}
                     else if(ii==22){base_time=4*60*1000;increment=2*1000;}
-                    else if(ii==24){ use_ponder=!use_ponder; if(!use_ponder){ stop_pondering(); cancel_uci_ponder(); bottom_log_push("Ponder OFF"); } else bottom_log_push("Ponder ON"); }
+                    else if(ii==24){ use_ponder=!use_ponder; for(int _ei=0;_ei<MAX_ENGINES;_ei++) uci_disable_engine_pb(_ei); if(!use_ponder){ stop_pondering(); cancel_uci_ponder(); bottom_log_push("Ponder OFF"); } else bottom_log_push("Ponder ON"); }
                     if(ii>=13&&ii<=22){ char _dbg[96]; snprintf(_dbg,sizeof _dbg,
                         "Settings menu ii=%d clicked -> base_time=%u increment=%u",
                         ii, base_time, increment); uci_dbg_log("CLOCK", -1, _dbg); }
