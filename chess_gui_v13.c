@@ -2327,16 +2327,8 @@ static void draw_uci_options_dialog(void);
    the engine also run internal PB causes double-thinking and wasted time. */
 static void uci_disable_engine_pb(int ei){
     if(!uci_eng[ei].ready || !UCI_VALID(ei)) return;
-    const char *v = use_ponder ? "true" : "false";
-    for(int i=0;i<uci_eng[ei].num_options;i++){
-        if(strcmp(uci_eng[ei].options[i].name,"Ponder")==0) uci_eng[ei].options[i].cur_check = use_ponder;
-        if(strcmp(uci_eng[ei].options[i].name,"PermanentBrain")==0) uci_eng[ei].options[i].cur_check = use_ponder;
-    }
-    char cmd[64];
-    snprintf(cmd,sizeof(cmd),"setoption name Ponder value %s",v);
-    uci_send_raw(ei,cmd);
-    snprintf(cmd,sizeof(cmd),"setoption name PermanentBrain value %s",v);
-    uci_send_raw(ei,cmd);
+    uci_send_raw(ei, "setoption name Ponder value false");
+    uci_send_raw(ei, "setoption name PermanentBrain value false");
 }
 static void uci_set_book(int ei, int enable){
     if(!uci_eng[ei].ready || !UCI_VALID(ei)) return;
@@ -2384,13 +2376,13 @@ static void handle_menu(int mx,int my){
             if(mx>=ix&&mx<ix+iw&&my>=iy2&&my<iy2+ih){
                 open_menu=-1;
                 if(mi==0){
-                    if(ii==0){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    if(ii==0){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"Your move (White)");}
-                    else if(ii==1){stop_analysis();stop_pondering();stop_ai();player_color=BLACK;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    else if(ii==1){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=BLACK;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"Computer thinking...");}
-                    else if(ii==2){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;aivsai=1;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    else if(ii==2){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=WHITE;aivsai=1;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"AI vs AI");}
                     else if(ii==3){open_menu=-1;fen_dialog_active=1;fen_dialog_buf[0]=0;fen_dialog_len=0;SDL_StartTextInput();}
@@ -2400,7 +2392,7 @@ static void handle_menu(int mx,int my){
                         if(clip && strlen(clip)>10){
                             char tmp[256]; strncpy(tmp,clip,255); tmp[255]=0;
                             SDL_free(clip);
-                            stop_analysis();stop_pondering();stop_ai();
+                            stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;
                             if(parse_fen(tmp)){
                                 strncpy(game_start_fen,tmp,255);
                                 hist_n=0;game_hist_n=0;
@@ -2444,7 +2436,7 @@ static void handle_menu(int mx,int my){
                     else if(ii==19){base_time=120*60*1000;increment=0;}
                     else if(ii==21){base_time=5*60*1000;increment=3*1000;}
                     else if(ii==22){base_time=4*60*1000;increment=2*1000;}
-                    else if(ii==24){ use_ponder=!use_ponder; for(int _ei=0;_ei<MAX_ENGINES;_ei++) uci_disable_engine_pb(_ei); if(!use_ponder){ stop_pondering(); cancel_uci_ponder(); bottom_log_push("Ponder OFF"); } else bottom_log_push("Ponder ON"); }
+                    else if(ii==24){ use_ponder=!use_ponder; if(!use_ponder){ stop_pondering(); cancel_uci_ponder(); bottom_log_push("Ponder OFF"); } else bottom_log_push("Ponder ON"); }
                     if(ii>=13&&ii<=22){ char _dbg[96]; snprintf(_dbg,sizeof _dbg,
                         "Settings menu ii=%d clicked -> base_time=%u increment=%u",
                         ii, base_time, increment); uci_dbg_log("CLOCK", -1, _dbg); }
@@ -2468,6 +2460,8 @@ static void handle_menu(int mx,int my){
                         ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
                         if(GetOpenFileNameA(&ofn)){
                             strncpy(uci_eng[0].path,szFile,255);
+                            if(eng_analysis[0].is_thinking) stop_ai();
+                            stop_analysis(); stop_pondering();
                             uci_close_engine(0);
                             if(uci_spawn_engine(0, uci_eng[0].path)){
                                 uci_eng[0].ready=1; use_uci_engine=1; active_engine=0;
@@ -2499,6 +2493,8 @@ static void handle_menu(int mx,int my){
                         ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
                         if(GetOpenFileNameA(&ofn)){
                             strncpy(uci_eng[1].path,szFile,255);
+                            if(eng_analysis[1].is_thinking) stop_ai();
+                            stop_analysis(); stop_pondering();
                             uci_close_engine(1);
                             if(uci_spawn_engine(1, uci_eng[1].path)){
                                 uci_eng[1].ready=1; use_uci_engine=1; active_engine=1;
@@ -4118,8 +4114,23 @@ static void start_pondering(void) {
 
 /* ===================== SAVE PGN ===================== */
 static void save_pgn(void){
-    FILE *f=fopen("chess_game.pgn","w");
-    if(!f)return;
+    OPENFILENAMEA ofn={0};
+    char fname[260]="chess_game.pgn";
+    ofn.lStructSize=sizeof(ofn);
+    ofn.hwndOwner=NULL;
+    ofn.lpstrFile=fname;
+    ofn.nMaxFile=260;
+    ofn.lpstrFilter="PGN Files\0*.pgn\0All Files\0*.*\0";
+    ofn.nFilterIndex=1;
+    ofn.lpstrTitle="Save PGN";
+    ofn.Flags=OFN_OVERWRITEPROMPT;
+    if(!GetSaveFileNameA(&ofn)) return;
+    /* auto-append .pgn if missing */
+    {int flen=(int)strlen(fname);
+    if(flen<4 || _stricmp(fname+flen-4,".pgn")!=0){strcat(fname,".pgn");}}
+
+    FILE *f=fopen(fname,"w");
+    if(!f){ sprintf(msg,"Failed to save: %s",fname); return; }
     time_t t=time(NULL);struct tm *tm2=localtime(&t);
     fprintf(f,"[Event \"Casual Game\"]\n");
     fprintf(f,"[Site \"Chess\"]\n");
@@ -4194,7 +4205,7 @@ static void save_pgn(void){
     if(hist_n%2==1) fprintf(f,"\n");
     fprintf(f,"*\n");
     fclose(f);
-    strcpy(msg,"Saved: chess_game.pgn");
+    sprintf(msg,"Saved: %s",fname);
 }
 
 /* ===================== LOAD PGN ===================== */
@@ -4207,7 +4218,7 @@ static void load_pgn(void){
     ofn.nMaxFile=260;
     ofn.lpstrFilter="PGN Files\0*.pgn\0All Files\0*.*\0";
     ofn.nFilterIndex=1;
-    ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
+    ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST;
     if(!GetOpenFileNameA(&ofn)) return;
 
     FILE *f=fopen(fname,"r");
@@ -4229,7 +4240,8 @@ static void load_pgn(void){
     else p=buf; /* no tags — start from beginning */
 
     stop_ai(); stop_analysis(); stop_pondering();
-    turn=WHITE; hist_n=0; game_over=0; draw_offered=0;
+    init_board();
+    turn=WHITE;
 
     /* parse move tokens */
     int move_count=0;
@@ -4549,6 +4561,7 @@ static int uci_spawn_engine(int ei, const char *path){
     CloseHandle(chin_r); CloseHandle(cout_w); CloseHandle(pi.hThread);
     uci_hproc[ei]=pi.hProcess; uci_hin[ei]=chin_w; uci_hout[ei]=cout_r;
     uci_crash_logged[ei]=0;
+    uci_partial_len[ei]=0; uci_partial[ei][0]=0;
     { char m[300]; snprintf(m,sizeof m,"engine started: %s", path); uci_dbg_log("ENGINE", ei, m); }
 
     /* Parse UCI options during handshake */
@@ -4667,6 +4680,7 @@ static void uci_close_engine(int ei){
     }
     if(uci_hin[ei]) {CloseHandle(uci_hin[ei]); uci_hin[ei]=NULL;}
     if(uci_hout[ei]){CloseHandle(uci_hout[ei]);uci_hout[ei]=NULL;}
+    uci_partial_len[ei]=0; uci_partial[ei][0]=0;
     uci_eng[ei].ready=0;
     uci_eng[ei].num_options=0;
 }
@@ -5228,7 +5242,6 @@ static int uci_ponder_thread_func(void *data){
         }
     }
     uci_ponder_alive=0;
-    if(ei>=0&&ei<MAX_ENGINES) eng_analysis[ei].is_thinking=0;
     return 0;
 }
 
@@ -5253,7 +5266,6 @@ static void start_uci_ponder(int ei){
     uci_ponder_best_set=0; uci_ponder_best.fr=-1;
     uci_ponder_waiting=0;
     uci_ponder_alive=1;
-    eng_analysis[ei].is_thinking=1;
     uci_last_bestmove_ponder[ei].fr=-1; /* consumed */
     SDL_CreateThread(uci_ponder_thread_func,"UCIponder",(void*)(intptr_t)ei);
 }
@@ -5265,7 +5277,6 @@ static void cancel_uci_ponder(void){
     if(pe>=0&&pe<MAX_ENGINES&&uci_eng[pe].ready&&UCI_VALID(pe)) uci_send_raw(pe,"stop");
     int wait=0;
     while(uci_ponder_alive&&wait<400){SDL_Delay(5);wait++;}
-    if(pe>=0&&pe<MAX_ENGINES) eng_analysis[pe].is_thinking=0;
     uci_ponder_ei=-1;
     uci_ponder_waiting=0;
     uci_ponder_best_set=0;
@@ -5314,6 +5325,7 @@ static void tourney_stop(void){
 }
 
 static void tourney_begin_game(void){
+    pgn_replay_mode=0; pgn_replay_auto=0;
     stop_analysis();stop_pondering();stop_ai();
     init_board();turn=WHITE;game_start_fen[0]=0;
     game_over=0;draw_offered=0;
@@ -5401,6 +5413,7 @@ static void tourney_start_round_robin(int mode){
     tourney_rr_num = n;
     for(int i=0;i<n;i++) tourney_rr_players[i]=players[i];
     tourney_build_rr_schedule();
+    pgn_replay_mode=0; pgn_replay_auto=0;
     tourney_active=1; tourney_waiting=0;
     char msg2[128]; snprintf(msg2,sizeof(msg2),"Round Robin %d players, %d games", n, tourney_rr_sched_len);
     bottom_log_push(msg2);
@@ -5412,6 +5425,7 @@ static void tourney_start_round_robin(int mode){
     tourney_begin_game();
 }
 static void tourney_start_now(void){
+    pgn_replay_mode=0; pgn_replay_auto=0;
     tourney_autoset_players();
     tourney_active=1;tourney_played=0;
     tourney_score[0]=tourney_score[1]=0;
@@ -5759,7 +5773,7 @@ int main(void){
                         int tlen=strlen(tmp); while(tlen>0 && (tmp[tlen-1]=='\n' || tmp[tlen-1]=='\r' || tmp[tlen-1]==' ' || tmp[tlen-1]=='\t')) tmp[--tlen]=0;
                         char *tstart=tmp; while(*tstart==' '||*tstart=='\t') tstart++;
                         if(strlen(tstart)>10){
-                            stop_analysis();stop_pondering();stop_ai();
+                            stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;
                             if(parse_fen(tstart)){
                                 strncpy(game_start_fen,tstart,255);
                                 hist_n=0;game_hist_n=0;
@@ -5855,7 +5869,7 @@ int main(void){
                     }
                     goto skip_normal_keys;
                 }
-                if(k==SDLK_r){stop_analysis();stop_pondering();stop_ai();player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();game_start_fen[0]=0;
+                if(k==SDLK_r){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();game_start_fen[0]=0;
                     /* v10 FIX: ucinewgame on new game */
                     for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                     strcpy(msg,"Your move (White)");}
