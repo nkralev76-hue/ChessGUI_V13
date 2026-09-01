@@ -2077,8 +2077,8 @@ static int promo_click(int mx,int my){
 static const char*MNAME[N_MENUS]={"Game","Settings","Engine","Tournament","Options","Help"};
 static const char*GITEMS[]={
     "New game (White)","New game (Black)","AI vs AI",
-    "Load FEN  (L)","Load PGN","Paste FEN (Ctrl+V)","Undo move (U)",
-    "Draw offer","Resign","Save PGN",
+    "Load FEN  (L)","Load game","Paste FEN (Ctrl+V)","Undo move (U)",
+    "Draw offer","Resign","Save game",
     "Replay: Prev (Left)","Replay: Next (Right)","Replay: First (Home)","Replay: Last (End)",
     "Replay All (G)"
 };
@@ -2135,7 +2135,7 @@ static const char*HITEMS[]={
     "G        Replay all (auto-play)",
     "Left/Right  Replay prev/next",
     "Home/End   First/last move",
-    "Ctrl+S    Save game as PGN",
+    "Ctrl+S    Save game",
     "Y/Ctrl+C Copy FEN (FEN panel)",
     "--- Mouse ---",
     "Drag piece   Move a piece",
@@ -2466,7 +2466,8 @@ static void handle_menu(int mx,int my){
                         ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
                         if(GetOpenFileNameA(&ofn)){
                             strncpy(uci_eng[0].path,szFile,255);
-                            stop_ai(); stop_analysis(); stop_pondering();
+                            if(eng_analysis[0].is_thinking) stop_ai();
+                            stop_analysis(); stop_pondering();
                             uci_close_engine(0);
                             if(uci_spawn_engine(0, uci_eng[0].path)){
                                 uci_eng[0].ready=1; use_uci_engine=1; active_engine=0;
@@ -2485,7 +2486,8 @@ static void handle_menu(int mx,int my){
 #endif
                     }
                     else if(ii==4){
-                        stop_ai(); stop_analysis(); stop_pondering();
+                        if(eng_analysis[0].is_thinking) stop_ai();
+                        stop_analysis(); stop_pondering();
                         uci_close_engine(0);
                         if(uci_eng[0].path[0]&&uci_spawn_engine(0, uci_eng[0].path)){
                             uci_eng[0].ready=1; use_uci_engine=1; active_engine=0;
@@ -2501,9 +2503,15 @@ static void handle_menu(int mx,int my){
                         }
                     }
                     else if(ii==5){
-                        stop_ai(); stop_analysis(); stop_pondering();
+                        if(eng_analysis[0].is_thinking) stop_ai();
+                        stop_analysis(); stop_pondering();
                         uci_close_engine(0);
                         if(active_engine==0){ use_uci_engine=0; active_engine=0; }
+                        if(tourney_active){
+                            if(tourney_player[0]==1) tourney_player[0]=0;
+                            if(tourney_player[1]==1) tourney_player[1]=0;
+                            uci_dbg_log("ENGINE",0,"tournament slot for UCI1 -> built-in (disconnect)");
+                        }
                         strcpy(msg,"UCI Engine 1 disconnected");
                     }
                     else if(ii==7){
@@ -2520,7 +2528,8 @@ static void handle_menu(int mx,int my){
                         ofn.Flags=OFN_PATHMUSTEXIST|OFN_FILEMUSTEXIST|OFN_NOCHANGEDIR;
                         if(GetOpenFileNameA(&ofn)){
                             strncpy(uci_eng[1].path,szFile,255);
-                            stop_ai(); stop_analysis(); stop_pondering();
+                            if(eng_analysis[1].is_thinking) stop_ai();
+                            stop_analysis(); stop_pondering();
                             uci_close_engine(1);
                             if(uci_spawn_engine(1, uci_eng[1].path)){
                                 uci_eng[1].ready=1; use_uci_engine=1; active_engine=1;
@@ -2539,7 +2548,8 @@ static void handle_menu(int mx,int my){
 #endif
                     }
                     else if(ii==8){
-                        stop_ai(); stop_analysis(); stop_pondering();
+                        if(eng_analysis[1].is_thinking) stop_ai();
+                        stop_analysis(); stop_pondering();
                         uci_close_engine(1);
                         if(uci_eng[1].path[0]&&uci_spawn_engine(1, uci_eng[1].path)){
                             uci_eng[1].ready=1; use_uci_engine=1; active_engine=1;
@@ -2555,9 +2565,15 @@ static void handle_menu(int mx,int my){
                         }
                     }
                     else if(ii==9){
-                        stop_ai(); stop_analysis(); stop_pondering();
+                        if(eng_analysis[1].is_thinking) stop_ai();
+                        stop_analysis(); stop_pondering();
                         uci_close_engine(1);
                         if(active_engine==1){ use_uci_engine=0; active_engine=0; }
+                        if(tourney_active){
+                            if(tourney_player[0]==2) tourney_player[0]=0;
+                            if(tourney_player[1]==2) tourney_player[1]=0;
+                            uci_dbg_log("ENGINE",1,"tournament slot for UCI2 -> built-in (disconnect)");
+                        }
                         strcpy(msg,"UCI Engine 2 disconnected");
                     }
                 }
