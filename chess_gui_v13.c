@@ -3102,9 +3102,24 @@ static void draw_sidebar(int mx,int my){
             char hdr[120];
             const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
             snprintf(hdr,sizeof(hdr),"%s%s", side_lbl, ename);
-            int maxch=(int)((panel_w-40)/(9*UI_TEXT_SCALE)); if((int)strlen(hdr)>maxch){ hdr[maxch-3]=0; strcat(hdr,"..."); }
-            dtxt(FRAME_W+9, sy+5, hdr, 1, 0,0,0);
-            dtxt(FRAME_W+8, sy+4, hdr, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
+            int maxch=(int)((panel_w-40)/(9*UI_TEXT_SCALE)); if(maxch<10) maxch=10;
+            int hdr_extra=0;
+            if((int)strlen(hdr)>maxch){
+                // Show full name on two lines instead of truncating to "..."
+                hdr_extra=13;
+                char hdr1[120], hdr2[120];
+                strncpy(hdr1,hdr,maxch); hdr1[maxch]=0;
+                strncpy(hdr2,hdr+maxch,sizeof(hdr2)-1); hdr2[sizeof(hdr2)-1]=0;
+                char *p=hdr2; while(*p==' ') p++; if(p!=hdr2) memmove(hdr2,p,strlen(p)+1);
+                if((int)strlen(hdr2)>maxch){ hdr2[maxch-3]=0; strcat(hdr2,"..."); }
+                dtxt(FRAME_W+9, sy+5, hdr1, 1, 0,0,0);
+                dtxt(FRAME_W+8, sy+4, hdr1, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
+                dtxt(FRAME_W+9, sy+18, hdr2, 1, 0,0,0);
+                dtxt(FRAME_W+8, sy+17, hdr2, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
+            } else {
+                dtxt(FRAME_W+9, sy+5, hdr, 1, 0,0,0);
+                dtxt(FRAME_W+8, sy+4, hdr, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
+            }
             /* thinking indicator — colored dot per side (green for White, blue
                for Black), blinking while searching, instead of the old *THINKING* text */
             {
@@ -3133,8 +3148,8 @@ static void draw_sidebar(int mx,int my){
                 else if(dnps>=1000) snprintf(nps_s,sizeof(nps_s),"%.0fK",dnps/1000.0);
                 else snprintf(nps_s,sizeof(nps_s),"%lld", dnps);
                 snprintf(st1,sizeof(st1),"D%d  %s  NPS:%s", disp_depth, evals, nps_s);
-                dtxt(FRAME_W+11, sy+22, st1, 1, 0,0,0);
-                dtxt(FRAME_W+10, sy+21, st1, 1, 200,200,200);
+                dtxt(FRAME_W+11, sy+22+hdr_extra, st1, 1, 0,0,0);
+                dtxt(FRAME_W+10, sy+21+hdr_extra, st1, 1, 200,200,200);
                 /* PV */
                 const char *pvsrc = eng_analysis[ei].has_data ? eng_analysis[ei].pv : g_pv_str;
                 if(pvsrc[0]){
@@ -3146,15 +3161,15 @@ static void draw_sidebar(int mx,int my){
                     int pvlen=(int)strlen(pvsrc);
                     if(pvlen>max_ch) pvlen=max_ch;
                     strncpy(pv_display,pvsrc,pvlen); pv_display[pvlen]=0;
-                    dtxt(FRAME_W+11, sy+38, pv_display, 1, 30,30,30);
-                    dtxt(FRAME_W+10, sy+37, pv_display, 1, 232,232,232);
+                    dtxt(FRAME_W+11, sy+38+hdr_extra, pv_display, 1, 30,30,30);
+                    dtxt(FRAME_W+10, sy+37+hdr_extra, pv_display, 1, 232,232,232);
                     if((int)strlen(pvsrc)>max_ch && per_h>78){
                         int pv2_start=max_ch;
                         int pv2_len=(int)strlen(pvsrc)-pv2_start;
                         if(pv2_len>max_ch) pv2_len=max_ch;
                         strncpy(pv_display,pvsrc+pv2_start,pv2_len); pv_display[pv2_len]=0;
-                        dtxt(FRAME_W+11, sy+52, pv_display, 1, 20,20,20);
-                        dtxt(FRAME_W+10, sy+51, pv_display, 1, 170,170,170);
+                        dtxt(FRAME_W+11, sy+52+hdr_extra, pv_display, 1, 20,20,20);
+                        dtxt(FRAME_W+10, sy+51+hdr_extra, pv_display, 1, 170,170,170);
                     }
                     char nbuf[64];
                     long long nn = eng_analysis[ei].has_data ? eng_analysis[ei].nodes : nodes_count;
@@ -3168,10 +3183,10 @@ static void draw_sidebar(int mx,int my){
                     if(is_blue) dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 80,130,220);
                     else dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 255,165,0);
                 } else {
-                    dtxt(FRAME_W+10, sy+37, "(no analysis yet)", 1, 110,110,120);
+                    dtxt(FRAME_W+10, sy+37+hdr_extra, "(no analysis yet)", 1, 110,110,120);
                 }
             } else {
-                dtxt(FRAME_W+10, sy+22, "(waiting — not to move)", 1, 110,110,120);
+                dtxt(FRAME_W+10, sy+22+hdr_extra, "(waiting — not to move)", 1, 110,110,120);
                 if(eng_analysis[ei].has_data){
                     char evals[24]; int evforside = evfl ? -eng_analysis[ei].eval : eng_analysis[ei].eval;
                     if(evforside>9000) strcpy(evals,"M+");
