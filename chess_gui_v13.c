@@ -3103,19 +3103,41 @@ static void draw_sidebar(int mx,int my){
             const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
             snprintf(hdr,sizeof(hdr),"%s%s", side_lbl, ename);
             int maxch=(int)((panel_w-40)/(9*UI_TEXT_SCALE)); if(maxch<10) maxch=10;
+            // word-aware wrap: try to split at last space before maxch so "Strong_111" stays together
             int hdr_len=(int)strlen(hdr);
-            int hdr_lines = (hdr_len + maxch -1)/maxch; if(hdr_lines<1) hdr_lines=1; if(hdr_lines>3) hdr_lines=3;
-            int hdr_extra = (hdr_lines-1)*13;
+            // first pass to count lines with word boundaries
+            int tmp_off=0, tmp_lines=0;
+            while(tmp_off<hdr_len && tmp_lines<3){
+                int rem=hdr_len-tmp_off; int cop=rem>maxch?maxch:rem;
+                if(rem>maxch){
+                    int last_sp=-1;
+                    for(int k=cop-1;k>=maxch/2;k--) if(hdr[tmp_off+k]==' '){ last_sp=k; break; }
+                    if(last_sp>0) cop=last_sp;
+                }
+                tmp_off+=cop; while(tmp_off<hdr_len && hdr[tmp_off]==' ') tmp_off++;
+                tmp_lines++;
+            }
+            int hdr_lines=tmp_lines; if(hdr_lines<1) hdr_lines=1;
+            int hdr_extra=(hdr_lines-1)*13;
+            int off=0;
             for(int li=0; li<hdr_lines; li++){
-                char line[120]; int off=li*maxch; int rem=hdr_len-off;
-                int cop = rem>maxch?maxch:rem; if(cop<0) cop=0;
+                int rem=hdr_len-off; int cop=rem>maxch?maxch:rem;
+                if(rem>maxch){
+                    int last_sp=-1;
+                    for(int k=cop-1;k>=maxch/2;k--) if(hdr[off+k]==' '){ last_sp=k; break; }
+                    if(last_sp>0) cop=last_sp;
+                }
+                char line[120]; if(cop>119) cop=119;
                 strncpy(line, hdr+off, cop); line[cop]=0;
+                // trim leading spaces for continuation lines (already skipped, but safety)
                 if(li>0){ char *p=line; while(*p==' ') p++; if(p!=line) memmove(line,p,strlen(p)+1); }
-                if(li==hdr_lines-1 && hdr_len > hdr_lines*maxch){
+                // if still too long for last line and text remains, add ...
+                if(li==hdr_lines-1 && off+cop < hdr_len){
                     int ll=(int)strlen(line); if(ll>=3){ line[ll-3]=0; strcat(line,"..."); }
                 }
                 dtxt(FRAME_W+9, sy+5+li*13, line, 1, 0,0,0);
                 dtxt(FRAME_W+8, sy+4+li*13, line, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
+                off+=cop; while(off<hdr_len && hdr[off]==' ') off++;
             }
             /* thinking indicator — colored dot per side (green for White, blue
                for Black), blinking while searching, instead of the old *THINKING* text */
