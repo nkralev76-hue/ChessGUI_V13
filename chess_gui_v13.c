@@ -3103,22 +3103,19 @@ static void draw_sidebar(int mx,int my){
             const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
             snprintf(hdr,sizeof(hdr),"%s%s", side_lbl, ename);
             int maxch=(int)((panel_w-40)/(9*UI_TEXT_SCALE)); if(maxch<10) maxch=10;
-            int hdr_extra=0;
-            if((int)strlen(hdr)>maxch){
-                // Show full name on two lines instead of truncating to "..."
-                hdr_extra=13;
-                char hdr1[120], hdr2[120];
-                strncpy(hdr1,hdr,maxch); hdr1[maxch]=0;
-                strncpy(hdr2,hdr+maxch,sizeof(hdr2)-1); hdr2[sizeof(hdr2)-1]=0;
-                char *p=hdr2; while(*p==' ') p++; if(p!=hdr2) memmove(hdr2,p,strlen(p)+1);
-                if((int)strlen(hdr2)>maxch){ hdr2[maxch-3]=0; strcat(hdr2,"..."); }
-                dtxt(FRAME_W+9, sy+5, hdr1, 1, 0,0,0);
-                dtxt(FRAME_W+8, sy+4, hdr1, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
-                dtxt(FRAME_W+9, sy+18, hdr2, 1, 0,0,0);
-                dtxt(FRAME_W+8, sy+17, hdr2, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
-            } else {
-                dtxt(FRAME_W+9, sy+5, hdr, 1, 0,0,0);
-                dtxt(FRAME_W+8, sy+4, hdr, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
+            int hdr_len=(int)strlen(hdr);
+            int hdr_lines = (hdr_len + maxch -1)/maxch; if(hdr_lines<1) hdr_lines=1; if(hdr_lines>3) hdr_lines=3;
+            int hdr_extra = (hdr_lines-1)*13;
+            for(int li=0; li<hdr_lines; li++){
+                char line[120]; int off=li*maxch; int rem=hdr_len-off;
+                int cop = rem>maxch?maxch:rem; if(cop<0) cop=0;
+                strncpy(line, hdr+off, cop); line[cop]=0;
+                if(li>0){ char *p=line; while(*p==' ') p++; if(p!=line) memmove(line,p,strlen(p)+1); }
+                if(li==hdr_lines-1 && hdr_len > hdr_lines*maxch){
+                    int ll=(int)strlen(line); if(ll>=3){ line[ll-3]=0; strcat(line,"..."); }
+                }
+                dtxt(FRAME_W+9, sy+5+li*13, line, 1, 0,0,0);
+                dtxt(FRAME_W+8, sy+4+li*13, line, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
             }
             /* thinking indicator — colored dot per side (green for White, blue
                for Black), blinking while searching, instead of the old *THINKING* text */
