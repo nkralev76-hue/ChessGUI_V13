@@ -2889,7 +2889,7 @@ static void draw_eval_panel_v14(int sy, int sw, int dyn_panel_h){
         char di[256]; char engname[256];
         int show_uci = use_uci_engine; int show_ei=active_engine;
         if(tourney_active||aivsai){ int tp=(turn==WHITE)?tourney_player[0]:tourney_player[1]; if(tp==1){show_uci=1;show_ei=0;} else if(tp==2){show_uci=1;show_ei=1;} else show_uci=0; }
-        const char *src = show_uci ? (uci_eng[show_ei].name[0] ? uci_eng[show_ei].name : uci_eng[show_ei].path) : "StrongEngine";
+        const char *src = show_uci ? uci_eng[show_ei].path : "StrongEngine";
         strncpy(engname, src, 255); engname[255]=0;
         char *sl=strrchr(engname,
 #ifdef _WIN32
@@ -3090,15 +3090,13 @@ static void draw_sidebar(int mx,int my){
             if(ei==ENG_BUILTIN_IDX){
                 snprintf(ename,sizeof(ename),"%s", eng_analysis[ei].has_data && eng_analysis[ei].name[0] ? eng_analysis[ei].name : "StrongEngine (Built-in)");
             } else {
-                const char *n = eng_analysis[ei].name[0] ? eng_analysis[ei].name : uci_eng[ei].name[0] ? uci_eng[ei].name : (ei==0?"UCI Engine 1":"UCI Engine 2");
-                /* fallback to path basename if name empty */
-                if(!n[0] || strcmp(n,"UCI Engine 1")==0 || strcmp(n,"UCI Engine 2")==0){
-                    if(uci_eng[ei].path[0]){
-                        const char *p = strrchr(uci_eng[ei].path,'\\'); if(!p) p=strrchr(uci_eng[ei].path,'/');
-                        n = p ? p+1 : uci_eng[ei].path;
-                    }
+                /* use path basename — engines may report same "id name" (e.g. "Strong") */
+                if(uci_eng[ei].path[0]){
+                    const char *p = strrchr(uci_eng[ei].path,'\\'); if(!p) p=strrchr(uci_eng[ei].path,'/');
+                    snprintf(ename,sizeof(ename),"%s", p ? p+1 : uci_eng[ei].path);
+                } else {
+                    snprintf(ename,sizeof(ename),"UCI Engine %d", ei+1);
                 }
-                snprintf(ename,sizeof(ename),"%s", n);
             }
             char hdr[280];
             const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
