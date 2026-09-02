@@ -2886,10 +2886,11 @@ static void draw_eval_panel_v14(int sy, int sw, int dyn_panel_h){
     dtxt(FRAME_W+9,sy+5,"EVAL",1,0,0,0);
     dtxt(FRAME_W+8,sy+4,"EVAL",1,255,165,0);
     {
-        char di[64]; char engname[64];
+        char di[256]; char engname[256];
         int show_uci = use_uci_engine; int show_ei=active_engine;
         if(tourney_active||aivsai){ int tp=(turn==WHITE)?tourney_player[0]:tourney_player[1]; if(tp==1){show_uci=1;show_ei=0;} else if(tp==2){show_uci=1;show_ei=1;} else show_uci=0; }
-        strncpy(engname, show_uci?uci_eng[show_ei].path:"StrongEngine",63);
+        const char *src = show_uci ? (uci_eng[show_ei].name[0] ? uci_eng[show_ei].name : uci_eng[show_ei].path) : "StrongEngine";
+        strncpy(engname, src, 255); engname[255]=0;
         char *sl=strrchr(engname,
 #ifdef _WIN32
         '\\'
@@ -3085,7 +3086,7 @@ static void draw_sidebar(int mx,int my){
             frect(FRAME_W+4,sy,panel_w,per_h, bgR,bgG,bgB);
             orect(FRAME_W+4,sy,panel_w,per_h, borR,borG,borB);
             /* Name */
-            char ename[96];
+            char ename[256];
             if(ei==ENG_BUILTIN_IDX){
                 snprintf(ename,sizeof(ename),"%s", eng_analysis[ei].has_data && eng_analysis[ei].name[0] ? eng_analysis[ei].name : "StrongEngine (Built-in)");
             } else {
@@ -3099,7 +3100,7 @@ static void draw_sidebar(int mx,int my){
                 }
                 snprintf(ename,sizeof(ename),"%s", n);
             }
-            char hdr[120];
+            char hdr[280];
             const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
             snprintf(hdr,sizeof(hdr),"%s%s", side_lbl, ename);
             int maxch=(int)((panel_w-40)/(9*UI_TEXT_SCALE)); if(maxch<10) maxch=10;
