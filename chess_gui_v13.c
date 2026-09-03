@@ -15,11 +15,12 @@
  *   per-engine analysis panels with names, clear Ponder ON/OFF indicator.
  *   V12 remains untouched.
  * Compile: gcc -O3 -march=native -flto -funroll-loops -mpopcnt -mavx2
- *          -o chess_gui_v13 chess_gui_v13.c -lSDL2 -lSDL2_image -lm -lcomdlg32
+ *          -o chess_gui_v13 chess_gui_v13.c -lSDL2 -lSDL2_image -lSDL2_ttf -lm -lcomdlg32
  */
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_ttf.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -106,7 +107,7 @@ static int real_w = 0, real_h = 0;
 #define BOARD_OY (MENU_H+CLOCK_BAR_H+BOARD_GAP) /* board below clock bar */
 #define FRAME_W  (COORD_W+BOARD_GAP+BRD+BOARD_GAP) /* wood frame + coords width   */
 #define FRAME_H  (CLOCK_BAR_H+BOARD_GAP+BRD+COORD_H+BOARD_GAP) /* includes clock bar + equal gaps */
-#define LOG_H    150                  /* v13 CMD: much taller bottom log — request */
+#define LOG_H    180                  /* increased for TTF font line spacing */
 #define PANEL_W  (SIDE_W-8)           /* uniform panel width */
 #define PANEL_H  105                  /* uniform panel height — larger per request, was 88 */
 #define WIN_W    (FRAME_W+SIDE_W)
@@ -188,6 +189,70 @@ static int retro_coords_big = 0; /* user requested: no big coords */
 static int retro_piece_style = 0;
 /* v14: UI text scale — 1.2 requested for readability */
 static double UI_TEXT_SCALE = 1.2;
+/* v16: TTF font + measured advances — replaces per-call UI_ADV.
+    RAW_ADV/UI_ADV are the average character advance in pixels measured
+    from the loaded TTF at open time; fall back to 9.0 so every layout
+    expression still works before init_fonts() has run. RAW_LINE_H/
+    UI_LINE_H are likewise measured. */
+static TTF_Font *font_raw = NULL;
+static TTF_Font *font_ui  = NULL;
+static double RAW_ADV = 9.0, UI_ADV = 9.0;
+static int RAW_LINE_H = 9, UI_LINE_H = 9;
+
+#define GLYPH_CACHE_SIZE 1024
+typedef struct { char key[192]; SDL_Texture *tex; int w,h; int used; } GlyphCacheEnt;
+static GlyphCacheEnt glyph_cache[GLYPH_CACHE_SIZE];
+
+static unsigned glyph_hash(const char*s){
+    unsigned h=2166136261u;
+    for(;*s;s++){ h^=(unsigned char)*s; h*=16777619u; }
+    return h;
+}
+extern SDL_Renderer *ren;
+static void ttf_draw(TTF_Font*f,int is_ui,int x,int y,const char*t,int R,int Gv,int B){
+    if(!f || !t || !t[0]) return;
+    char key[192];
+    snprintf(key,sizeof(key),"%d|%d,%d,%d|%s",is_ui,R,Gv,B,t);
+    unsigned h = glyph_hash(key) % GLYPH_CACHE_SIZE;
+    unsigned probe = h;
+    for(int tries=0; tries<8; tries++, probe=(probe+1)%GLYPH_CACHE_SIZE){
+        GlyphCacheEnt*e=&glyph_cache[probe];
+        if(e->used && strcmp(e->key,key)==0){
+            SDL_Rect d={x,y,e->w,e->h};
+            SDL_RenderCopy(ren,e->tex,NULL,&d);
+            return;
+        }
+    }
+    SDL_Color col={ (Uint8)R,(Uint8)Gv,(Uint8)B,255 };
+    SDL_Surface *surf = TTF_RenderUTF8_Blended(f,t,col);
+    if(!surf) return;
+    SDL_Texture *tex = SDL_CreateTextureFromSurface(ren,surf);
+    int w=surf->w,hh=surf->h;
+    SDL_FreeSurface(surf);
+    if(!tex) return;
+    GlyphCacheEnt*slot=&glyph_cache[h];
+    if(slot->used && slot->tex) SDL_DestroyTexture(slot->tex);
+    strncpy(slot->key,key,sizeof(slot->key)-1); slot->key[sizeof(slot->key)-1]=0;
+    slot->tex=tex; slot->w=w; slot->h=hh; slot->used=1;
+    SDL_Rect d={x,y,w,hh};
+    SDL_RenderCopy(ren,tex,NULL,&d);
+}
+static void init_fonts(void){
+    if(TTF_Init()!=0) return;
+    int base_pt = 13;
+    int ui_pt   = (int)round(base_pt*UI_TEXT_SCALE); if(ui_pt<base_pt) ui_pt=base_pt;
+    font_raw = TTF_OpenFont("fonts/DejaVuSans.ttf", base_pt);
+    font_ui  = TTF_OpenFont("fonts/DejaVuSans.ttf", ui_pt);
+    const char*sample="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    if(font_raw){
+        int w,h; TTF_SizeUTF8(font_raw,sample,&w,&h);
+        RAW_ADV=(double)w/(double)strlen(sample); RAW_LINE_H=TTF_FontHeight(font_raw);
+    }
+    if(font_ui){
+        int w,h; TTF_SizeUTF8(font_ui,sample,&w,&h);
+        UI_ADV=(double)w/(double)strlen(sample); UI_LINE_H=TTF_FontHeight(font_ui);
+    }
+}
 
 /* ---- GUI state ---- */
 BBoard B;
@@ -516,7 +581,7 @@ static void load_pieces(void){
     for(int c=0;c<2;c++)for(int t=1;t<=6;t++){
         char p[128];sprintf(p,"pieces/%s%s.png",cl[c],nm[t]);
         SDL_Surface*s=IMG_Load(p);
-        if(s){tex[c][t]=SDL_CreateTextureFromSurface(ren,s);SDL_SetTextureScaleMode(tex[c][t], SDL_ScaleModeNearest);SDL_FreeSurface(s);}
+        if(s){tex[c][t]=SDL_CreateTextureFromSurface(ren,s);SDL_SetTextureScaleMode(tex[c][t], SDL_ScaleModeLinear);SDL_FreeSurface(s);}
         else tex[c][t]=NULL;
     }
 }
@@ -1937,28 +2002,14 @@ static const unsigned char PF[128][9]={
     ['!']={0x18,0x18,0x18,0x18,0,0,0,0x18},['?']={0x3C,0x66,0x06,0x0C,0x18,0,0,0x18},
     ['_']={0,0,0,0,0,0,0x7E},['*']= {0,0,0x66,0x3C,0xFF,0x3C,0x66,0},
 };
+/* v16: TTF text — replaces PF[] bitmap grid */
 static void dtxt(int x,int y,const char*t,int sc,int R,int Gv,int B){
-    SDL_SetRenderDrawColor(ren,R,Gv,B,255);
-    double eff = sc * UI_TEXT_SCALE;
-    int eff_i = (int)ceil(eff);
-    if(eff_i<1) eff_i=1;
-    for(int ci=0;t[ci];ci++){unsigned char ch=(unsigned char)t[ci];if(ch>127)continue;
-        int base_x = x + (int)round(ci * 9 * eff);
-        for(int row=0;row<9;row++)for(int bit=0;bit<8;bit++)
-            if(PF[ch][row]&(0x80>>bit)){
-                int px = base_x + (int)round(bit*eff);
-                int py = y + (int)round(row*eff);
-                SDL_Rect r={px,py,eff_i,eff_i};
-                SDL_RenderFillRect(ren,&r);
-            }
-    }
+    (void)sc;
+    ttf_draw(font_ui,1,x,y,t,R,Gv,B);
 }
 static void dtxt_raw(int x,int y,const char*t,int sc,int R,int Gv,int B){
-    SDL_SetRenderDrawColor(ren,R,Gv,B,255);
-    for(int ci=0;t[ci];ci++){unsigned char ch=(unsigned char)t[ci];if(ch>127)continue;
-        for(int row=0;row<9;row++)for(int bit=0;bit<8;bit++)
-            if(PF[ch][row]&(0x80>>bit)){SDL_Rect px={x+ci*(8*sc+sc)+bit*sc,y+row*sc,sc,sc};SDL_RenderFillRect(ren,&px);}
-    }
+    (void)sc;
+    ttf_draw(font_raw,0,x,y,t,R,Gv,B);
 }
 static void sq2px(int r,int c,int*px,int*py){
     int fl=flip_board^(player_color==BLACK?1:0);
@@ -2168,7 +2219,7 @@ static void draw_menus(int mx,int my){
     }
     SDL_SetRenderDrawColor(ren,255,165,0,255); SDL_RenderDrawLine(ren,0,MENU_H-1,menu_w,MENU_H-1);
     SDL_SetRenderDrawColor(ren,60,60,70,255); SDL_RenderDrawLine(ren,0,MENU_H-2,menu_w,MENU_H-2);
-    if(!ai_thinking){int tw=(int)(strlen(msg)*9*UI_TEXT_SCALE);if(tw<WIN_W-200)dtxt_raw(WIN_W-tw-4,14,msg,1,130,130,160);}
+    if(!ai_thinking){int tw=(int)(strlen(msg)*UI_ADV);if(tw<WIN_W-200)dtxt_raw(WIN_W-tw-4,14,msg,1,130,130,160);}
     int mw=120,mx0=4,gap=4;
     for(int mi=0;mi<N_MENUS;mi++){
         int bx=mx0+mi*(mw+gap),by=3,bh=MENU_H-6;
@@ -2176,7 +2227,7 @@ static void draw_menus(int mx,int my){
         frect(bx,by,mw,bh, act?48: (hov?28:0), act?26:(hov?28:0), act?0:(hov?28:0)); /* CMD: orange when active, gray when hover */
         if(act) orect(bx,by,mw,bh,255,165,0);
         else if(hov) orect(bx,by,mw,bh,90,90,90);
-        int tw=(int)(strlen(MNAME[mi])*9+9);
+        int tw=(int)(strlen(MNAME[mi])*RAW_ADV+RAW_ADV);
         dtxt_raw(bx+(mw-tw)/2,by+11,MNAME[mi],1,act?255:(hov?240:210),act?255:(hov?255:230),act?255:(hov?240:210));
         if(open_menu==mi){
             int n=menu_count(mi),ih=26,iw=(mi==5)?320:220,ix=bx,iy=MENU_H;
@@ -2597,7 +2648,7 @@ static void draw_captured_box(int x,int y,int w,int h,int white_side,const char*
     int md=material_diff();
     if((white_side&&md>0)||(!white_side&&md<0)){
         char b[8]; snprintf(b,sizeof b,"+%d", white_side?md:-md);
-        dtxt(x+w-(int)(strlen(b)*9*UI_TEXT_SCALE), y, b,1,225,185,90);
+        dtxt(x+w-(int)(strlen(b)*UI_ADV), y, b,1,225,185,90);
     }
 }
 /* v12: small eval-history sparkline, drawn next to the material eval bar */
@@ -2899,7 +2950,7 @@ static void draw_eval_panel_v14(int sy, int sw, int dyn_panel_h){
 #endif
         ); if(sl) memmove(engname,sl+1,strlen(sl));
         snprintf(di,sizeof(di),"%s",engname);
-        int maxch=(int)((sw-60)/(9*UI_TEXT_SCALE)); if(maxch<8)maxch=8;
+        int maxch=(int)((sw-60)/(UI_ADV)); if(maxch<8)maxch=8;
         if((int)strlen(di)>maxch){di[maxch-3]=0;strcat(di,"...");}
         int ecol=(show_uci&&uci_eng[show_ei].ready)?220:160;
         dtxt(FRAME_W+8+50,sy+4,di,1,ecol,ecol,ecol);
@@ -3101,7 +3152,7 @@ static void draw_sidebar(int mx,int my){
             char hdr[280];
             const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
             snprintf(hdr,sizeof(hdr),"%s%s", side_lbl, ename);
-            int maxch=(int)((panel_w-40)/(9*UI_TEXT_SCALE)); if(maxch<10) maxch=10;
+            int maxch=(int)((panel_w-40)/(UI_ADV)); if(maxch<10) maxch=10;
             // word-aware wrap: try to split at last space before maxch so "Strong_111" stays together
             int hdr_len=(int)strlen(hdr);
             // first pass to count lines with word boundaries
@@ -3117,7 +3168,7 @@ static void draw_sidebar(int mx,int my){
                 tmp_lines++;
             }
             int hdr_lines=tmp_lines; if(hdr_lines<1) hdr_lines=1;
-            int hdr_extra=(hdr_lines-1)*13;
+            int hdr_extra=(hdr_lines-1)*UI_LINE_H;
             int off=0;
             for(int li=0; li<hdr_lines; li++){
                 int rem=hdr_len-off; int cop=rem>maxch?maxch:rem;
@@ -3166,28 +3217,31 @@ static void draw_sidebar(int mx,int my){
                 else if(dnps>=1000) snprintf(nps_s,sizeof(nps_s),"%.0fK",dnps/1000.0);
                 else snprintf(nps_s,sizeof(nps_s),"%lld", dnps);
                 snprintf(st1,sizeof(st1),"D%d  %s  NPS:%s", disp_depth, evals, nps_s);
-                dtxt(FRAME_W+11, sy+22+hdr_extra, st1, 1, 0,0,0);
-                dtxt(FRAME_W+10, sy+21+hdr_extra, st1, 1, 200,200,200);
+                int stats_y = sy + 4 + hdr_extra + UI_LINE_H + 2;
+                dtxt(FRAME_W+11, stats_y+1, st1, 1, 0,0,0);
+                dtxt(FRAME_W+10, stats_y, st1, 1, 200,200,200);
                 /* PV */
                 const char *pvsrc = eng_analysis[ei].has_data ? eng_analysis[ei].pv : g_pv_str;
                 if(pvsrc[0]){
                     int pv_avail=panel_w-20;
                     if(pv_avail<60) pv_avail=60;
-                    int max_ch=(int)(pv_avail/(9*UI_TEXT_SCALE));
+                    int max_ch=(int)(pv_avail/(UI_ADV));
                     if(max_ch<10) max_ch=10; if(max_ch>180) max_ch=180;
                     char pv_display[200];
                     int pvlen=(int)strlen(pvsrc);
                     if(pvlen>max_ch) pvlen=max_ch;
                     strncpy(pv_display,pvsrc,pvlen); pv_display[pvlen]=0;
-                    dtxt(FRAME_W+11, sy+38+hdr_extra, pv_display, 1, 30,30,30);
-                    dtxt(FRAME_W+10, sy+37+hdr_extra, pv_display, 1, 232,232,232);
-                    if((int)strlen(pvsrc)>max_ch && per_h>78){
+                    int pv1_y = stats_y + UI_LINE_H + 2;
+                    dtxt(FRAME_W+11, pv1_y+1, pv_display, 1, 30,30,30);
+                    dtxt(FRAME_W+10, pv1_y, pv_display, 1, 232,232,232);
+                    if((int)strlen(pvsrc)>max_ch && per_h > (pv1_y - sy) + UI_LINE_H*3){
                         int pv2_start=max_ch;
                         int pv2_len=(int)strlen(pvsrc)-pv2_start;
                         if(pv2_len>max_ch) pv2_len=max_ch;
                         strncpy(pv_display,pvsrc+pv2_start,pv2_len); pv_display[pv2_len]=0;
-                        dtxt(FRAME_W+11, sy+52+hdr_extra, pv_display, 1, 20,20,20);
-                        dtxt(FRAME_W+10, sy+51+hdr_extra, pv_display, 1, 170,170,170);
+                        int pv2_y = pv1_y + UI_LINE_H + 1;
+                        dtxt(FRAME_W+11, pv2_y+1, pv_display, 1, 20,20,20);
+                        dtxt(FRAME_W+10, pv2_y, pv_display, 1, 170,170,170);
                     }
                     char nbuf[64];
                     long long nn = eng_analysis[ei].has_data ? eng_analysis[ei].nodes : nodes_count;
@@ -3195,16 +3249,18 @@ static void draw_sidebar(int mx,int my){
                     else if(nn>=1000000) snprintf(nbuf,sizeof(nbuf),"Nodes %.1fM", nn/1e6);
                     else if(nn>=1000) snprintf(nbuf,sizeof(nbuf),"Nodes %.0fK", nn/1000.0);
                     else snprintf(nbuf,sizeof(nbuf),"Nodes %lld", nn);
-                    int ny = sy + per_h - 14;
+                    int ny = sy + per_h - UI_LINE_H - 2;
                     dtxt(FRAME_W+10, ny, nbuf, 1, 120,120,120);
                     char evb2[16]; snprintf(evb2,sizeof(evb2),"%s", evals);
                     if(is_blue) dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 80,130,220);
                     else dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 255,165,0);
                 } else {
-                    dtxt(FRAME_W+10, sy+37+hdr_extra, "(no analysis yet)", 1, 110,110,120);
+                    int no_y = sy + 4 + hdr_extra + UI_LINE_H + 2;
+                    dtxt(FRAME_W+10, no_y, "(no analysis yet)", 1, 110,110,120);
                 }
             } else {
-                dtxt(FRAME_W+10, sy+22+hdr_extra, "(waiting — not to move)", 1, 110,110,120);
+                int wait_y = sy + 4 + hdr_extra + UI_LINE_H + 2;
+                dtxt(FRAME_W+10, wait_y, "(waiting — not to move)", 1, 110,110,120);
                 if(eng_analysis[ei].has_data){
                     char evals[24]; int evforside = evfl ? -eng_analysis[ei].eval : eng_analysis[ei].eval;
                     if(evforside>9000) strcpy(evals,"M+");
@@ -3233,16 +3289,16 @@ static void draw_sidebar(int mx,int my){
         const char *opn=current_opening_name();
         if(opn[0]){
             char ob[64]; snprintf(ob,sizeof(ob),"%s",opn);
-            int maxch=(int)((moves_w-90)/(9*UI_TEXT_SCALE)); if(maxch<10)maxch=10;
+            int maxch=(int)((moves_w-90)/(UI_ADV)); if(maxch<10)maxch=10;
             if((int)strlen(ob)>maxch){ob[maxch-3]=0;strcat(ob,"...");}
             dtxt(FRAME_W+8+70,sy+4,ob,1,255,220,120);
         }
     }
     static const char*PCL[7]={"","","N","B","R","Q","K"};
     int right_edge=FRAME_W+4+moves_w-8;
-    int line_h=14;
-    int panel_inner_y=sy+18;
-    int panel_inner_h=dyn_panel_h-22;
+    int line_h=UI_LINE_H+1;
+    int panel_inner_y=sy+4+UI_LINE_H+2;
+    int panel_inner_h=dyn_panel_h-(panel_inner_y-sy)-2;
     int lines_avail=panel_inner_h/line_h; if(lines_avail<1)lines_avail=1;
     /* v12.4: horizontal flow instead of a fixed two-column grid — wraps by actual
        text width so it always fits the panel, however narrow, instead of needing
@@ -3261,7 +3317,7 @@ static void draw_sidebar(int mx,int my){
         int cx=FRAME_W+8, lines=1;
         for(int i=start;i<hist_n;i++){
             char tok[20]; MV_TOKEN(i,tok);
-            int tw=(int)(int)(strlen(tok)*9*UI_TEXT_SCALE+8*UI_TEXT_SCALE);
+            int tw=(int)(int)(strlen(tok)*UI_ADV+8*UI_TEXT_SCALE);
             if(cx+tw>right_edge){cx=FRAME_W+8;lines++;}
             cx+=tw;
         }
@@ -3271,7 +3327,7 @@ static void draw_sidebar(int mx,int my){
     int cur_y=panel_inner_y;
     for(int i=start;i<hist_n;i++){
         char tok[20]; MV_TOKEN(i,tok);
-        int tw=(int)(int)(strlen(tok)*9*UI_TEXT_SCALE+8*UI_TEXT_SCALE);
+        int tw=(int)(int)(strlen(tok)*UI_ADV+8*UI_TEXT_SCALE);
         if(cx+tw>right_edge){ cx=FRAME_W+8; cur_y+=line_h; if(cur_y+line_h > sy+dyn_panel_h) break; }
         int R2=170,G2=170,B2=170;if(i==hist_n-1){R2=255;G2=165;B2=0;}
         dtxt(cx,cur_y,tok,1,R2,G2,B2);
@@ -3289,15 +3345,15 @@ static void draw_sidebar(int mx,int my){
         int is_hover = (mx>=fx && mx<fx+fw && my>=fy && my<fy+fh);
         orect(fx,fy,fw,fh, is_hover?255:70, is_hover?165:70, is_hover?0:70);
         dtxt(fx+6,fy+4,"FEN",1,255,165,0);
-        dtxt(fx+6+ (int)(3*9*UI_TEXT_SCALE),fy+4,"(click to copy)",1,90,90,90);
+        dtxt(fx+6+ (int)(3*UI_ADV),fy+4,"(click to copy)",1,90,90,90);
         const char *copy_lbl="[Copy]";
-        int copy_w=(int)(strlen(copy_lbl)*9*UI_TEXT_SCALE + 6);
+        int copy_w=(int)(strlen(copy_lbl)*UI_ADV + 6);
         int copy_x=fx+fw-copy_w-6, copy_y=fy+4;
-        int copy_hover = (mx>=copy_x && mx<copy_x+copy_w && my>=copy_y && my<copy_y+ (int)(12*UI_TEXT_SCALE));
+        int copy_hover = (mx>=copy_x && mx<copy_x+copy_w && my>=copy_y && my<copy_y+ UI_LINE_H);
         dtxt(copy_x, copy_y, copy_lbl,1, copy_hover?255:180, copy_hover?255:200, copy_hover?255:180);
         char fen_disp[256];
         int avail_w = fw - 12;
-        int maxch = (int)(avail_w / (9*UI_TEXT_SCALE));
+        int maxch = (int)(avail_w / (UI_ADV));
         if(maxch<10) maxch=10;
         if(maxch> (int)sizeof(fen_disp)-1) maxch=sizeof(fen_disp)-1;
         strncpy(fen_disp, cached_fen, maxch);
@@ -3321,13 +3377,13 @@ static void draw_sidebar(int mx,int my){
         if(!use_ponder){
             snprintf(pbuf,sizeof(pbuf),"PONDER OFF");
             dtxt(bx+8, by+7, pbuf, 1, 200,200,200);
-            dtxt(bx+8 + (int)(strlen(pbuf)*9*UI_TEXT_SCALE) + 8, by+7, "(Settings)", 1, 110,110,110);
+            dtxt(bx+8 + (int)(strlen(pbuf)*UI_ADV) + 8, by+7, "(Settings)", 1, 110,110,110);
         } else if(ponder_any){
             int blink = (SDL_GetTicks()/350)%2;
             snprintf(pbuf,sizeof(pbuf),"PONDER ON %s d%d", blink?"[*]":"[ ]", g_best_depth);
             dtxt(bx+8, by+7, pbuf, 1, 255,180,40);
-            if(uci_ponder_alive) dtxt(bx+8+ (int)(strlen(pbuf)*9*UI_TEXT_SCALE), by+7, " UCI", 1, 255,200,80);
-            else if(ponder_running) dtxt(bx+8+ (int)(strlen(pbuf)*9*UI_TEXT_SCALE), by+7, " CPU", 1, 200,200,200);
+            if(uci_ponder_alive) dtxt(bx+8+ (int)(strlen(pbuf)*UI_ADV), by+7, " UCI", 1, 255,200,80);
+            else if(ponder_running) dtxt(bx+8+ (int)(strlen(pbuf)*UI_ADV), by+7, " CPU", 1, 200,200,200);
         } else {
             snprintf(pbuf,sizeof(pbuf),"PONDER ON [IDLE]");
             dtxt(bx+8, by+7, pbuf, 1, 180,160,120);
@@ -3361,12 +3417,12 @@ static void draw_bottom_log(void){
         int box_h=LOG_H-26;
         frect(COORD_W,ly,rw - COORD_W - 8,box_h,0,0,0);
         orect(COORD_W,ly,rw - COORD_W - 8,box_h,55,55,55);
-        int line_h=12;
+        int line_h=RAW_LINE_H+2;
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
         int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_engine(bottom_log_lines[i])==-1) cnt++;
         int show_n = cnt<max_lines ? cnt : max_lines;
         int box_w = rw - COORD_W - 8;
-        int maxch = (box_w - 12)/9; if(maxch<20) maxch=20; if(maxch>120) maxch=120;
+        int maxch = (box_w - 12)/RAW_ADV; if(maxch<20) maxch=20; if(maxch>120) maxch=120;
         int drawn=0;
         for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
             char *ln = bottom_log_lines[i];
@@ -3388,12 +3444,12 @@ static void draw_bottom_log(void){
         int box_h=LOG_H-26;
         frect(COORD_W,ly,rw - COORD_W - 8,box_h,0,0,0);
         orect(COORD_W,ly,rw - COORD_W - 8,box_h,55,55,55);
-        int line_h=12;
+        int line_h=RAW_LINE_H+2;
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
         int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_engine(bottom_log_lines[i])==out_ei) cnt++;
         int show_n = cnt<max_lines ? cnt : max_lines;
         int box_w2 = rw - COORD_W - 8;
-        int maxch2 = (box_w2 - 12)/9; if(maxch2<20) maxch2=20; if(maxch2>120) maxch2=120;
+        int maxch2 = (box_w2 - 12)/RAW_ADV; if(maxch2<20) maxch2=20; if(maxch2>120) maxch2=120;
         int drawn=0;
         for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
             char *ln = bottom_log_lines[i];
@@ -5627,6 +5683,7 @@ static void draw_uci_options_dialog(void){
     if(slash2&&(!slash||slash2>slash))slash=slash2;
     if(slash) memmove(ename,slash+1,strlen(slash));
     char title[128]; snprintf(title,sizeof(title),"UCI Options — Engine %d: %s",ei+1,ename);
+    { int title_max_px=(dw-190)-14-10; int title_maxch=(int)(title_max_px/RAW_ADV); if(title_maxch<10) title_maxch=10; if((int)strlen(title)>title_maxch){ title[title_maxch-3]=0; strcat(title,"..."); } }
     dtxt_raw(dx+14,dy+11,title,1,240,220,180);
     dtxt_raw(dx+13,dy+10,title,1,255,240,200);
     /* engine tab switcher — pill style */
@@ -5680,7 +5737,7 @@ static void draw_uci_options_dialog(void){
                 case UOPT_STRING:snprintf(buf,sizeof(buf),"%s: %s",o->name,o->cur_str[0]?o->cur_str:"<empty>"); break;
                 case UOPT_BUTTON:snprintf(buf,sizeof(buf),"%s",o->name); break;
             }
-            int maxch=(dw-54)/9; if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
+            int maxch=(dw-54)/RAW_ADV; if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
             int R=220,G=220,B=230;
             if(o->type==UOPT_BUTTON){R=255;G=220;B=120;}
             else if(o->type==UOPT_SPIN){R=180;G=220;B=240;}
@@ -5742,6 +5799,7 @@ int main(void){
     real_w=WIN_W; real_h=WIN_H;
     ren=SDL_CreateRenderer(win,-1,SDL_RENDERER_ACCELERATED);
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
+    init_fonts();
     load_pieces();
 #ifdef USE_BOOK
     init_br();
@@ -6185,6 +6243,6 @@ int main(void){
     uci_close_engine(0); /* v10 */
     uci_close_engine(1); /* v10 */
     if(aud)SDL_CloseAudioDevice(aud);
-    IMG_Quit();SDL_DestroyRenderer(ren);SDL_DestroyWindow(win);SDL_Quit();
+    TTF_Quit();IMG_Quit();SDL_DestroyRenderer(ren);SDL_DestroyWindow(win);SDL_Quit();
     return 0;
 }
