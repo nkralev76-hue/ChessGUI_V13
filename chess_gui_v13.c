@@ -15,7 +15,7 @@
  *   per-engine analysis panels with names, clear Ponder ON/OFF indicator.
  *   V12 remains untouched.
  * Compile: gcc -O3 -march=native -flto -funroll-loops -mpopcnt -mavx2
- *          -o chess_gui_v13 chess_gui_v13.c -lSDL2 -lSDL2_image -lSDL2_ttf -lm -lcomdlg32
+ *          -o chess_gui_v13 chess_gui_v13.c -lSDL2 -lSDL2_image -lm -lcomdlg32
  */
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
@@ -107,7 +107,7 @@ static int real_w = 0, real_h = 0;
 #define BOARD_OY (MENU_H+CLOCK_BAR_H+BOARD_GAP) /* board below clock bar */
 #define FRAME_W  (COORD_W+BOARD_GAP+BRD+BOARD_GAP) /* wood frame + coords width   */
 #define FRAME_H  (CLOCK_BAR_H+BOARD_GAP+BRD+COORD_H+BOARD_GAP) /* includes clock bar + equal gaps */
-#define LOG_H    180                  /* increased for TTF font line spacing */
+#define LOG_H    150                  /* v13 CMD: much taller bottom log — request */
 #define PANEL_W  (SIDE_W-8)           /* uniform panel width */
 #define PANEL_H  105                  /* uniform panel height — larger per request, was 88 */
 #define WIN_W    (FRAME_W+SIDE_W)
@@ -189,6 +189,7 @@ static int retro_coords_big = 0; /* user requested: no big coords */
 static int retro_piece_style = 0;
 /* v14: UI text scale — 1.2 requested for readability */
 static double UI_TEXT_SCALE = 1.2;
+
 /* ---- GUI state ---- */
 BBoard B;
 int turn=WHITE,sel_r=-1,sel_c=-1,game_over=0,player_color=WHITE;
@@ -240,14 +241,25 @@ int eval_hist[EVAL_HIST_MAX];
 SDL_Window *win=NULL;
 SDL_Renderer *ren=NULL;
 
-/* v16: TTF font + measured advances — replaces per-call UI_ADV.
-    RAW_ADV/UI_ADV are the average character advance in pixels measured
-    from the loaded TTF at open time; fall back to 9.0 so every layout
-    expression still works before init_fonts() has run. RAW_LINE_H/
-    UI_LINE_H are likewise measured. */
+/* ===================== v14: TTF TEXT RENDERING =====================
+   Replaces the old 8x9 bitmap font (blocky at any non-1x scale, no
+   anti-aliasing) with a real TrueType font rendered through SDL_ttf.
+   font_raw  = base-size font, used by dtxt_raw() (always drawn at sc=1,
+               independent of UI_TEXT_SCALE — menus, logs, dialogs).
+   font_ui   = UI_TEXT_SCALE-sized font, used by dtxt() (panel labels,
+               eval bar, captured pieces, move list, etc).
+   RAW_ADV / UI_ADV hold each font's *average* character advance width in
+   pixels (measured once at load time). The rest of the file estimates
+   string pixel widths for truncation/centering with "strlen(s)*ADV"
+   instead of doing a full TTF_SizeUTF8() at every call site — this was
+   already the pattern used with the old fixed 9px-per-char bitmap font,
+   just now driven by a real (proportional-average) measurement instead
+   of a hardcoded constant. It's an approximation for genuinely
+   proportional text, but keeps every existing layout call site working
+   with a one-line change instead of a full rewrite. */
 static TTF_Font *font_raw = NULL;
 static TTF_Font *font_ui  = NULL;
-static double RAW_ADV = 9.0, UI_ADV = 9.0;
+static double RAW_ADV = 9.0, UI_ADV = 9.0; /* fallback matches old bitmap font */
 static int RAW_LINE_H = 9, UI_LINE_H = 9;
 
 #define GLYPH_CACHE_SIZE 1024
@@ -259,7 +271,9 @@ static unsigned glyph_hash(const char*s){
     for(;*s;s++){ h^=(unsigned char)*s; h*=16777619u; }
     return h;
 }
-extern SDL_Renderer *ren;
+/* Renders (or fetches from cache) a texture for `text` in font `f` and
+   color R,Gv,B, then draws it at x,y. Cache key includes font identity so
+   font_raw and font_ui never collide. */
 static void ttf_draw(TTF_Font*f,int is_ui,int x,int y,const char*t,int R,int Gv,int B){
     if(!f || !t || !t[0]) return;
     char key[192];
@@ -274,6 +288,7 @@ static void ttf_draw(TTF_Font*f,int is_ui,int x,int y,const char*t,int R,int Gv,
             return;
         }
     }
+    /* miss: render fresh, evict the first probed slot (simple, bounded cache) */
     SDL_Color col={ (Uint8)R,(Uint8)Gv,(Uint8)B,255 };
     SDL_Surface *surf = TTF_RenderUTF8_Blended(f,t,col);
     if(!surf) return;
@@ -290,7 +305,7 @@ static void ttf_draw(TTF_Font*f,int is_ui,int x,int y,const char*t,int R,int Gv,
 }
 static void init_fonts(void){
     if(TTF_Init()!=0) return;
-    int base_pt = 13;
+    int base_pt = 13;                                   /* tune to taste */
     int ui_pt   = (int)round(base_pt*UI_TEXT_SCALE); if(ui_pt<base_pt) ui_pt=base_pt;
     font_raw = TTF_OpenFont("fonts/DejaVuSans.ttf", base_pt);
     font_ui  = TTF_OpenFont("fonts/DejaVuSans.ttf", ui_pt);
@@ -304,6 +319,7 @@ static void init_fonts(void){
         UI_ADV=(double)w/(double)strlen(sample); UI_LINE_H=TTF_FontHeight(font_ui);
     }
 }
+
 SDL_AudioDeviceID aud=0;
 SDL_Texture *tex[2][7];
 
@@ -581,6 +597,11 @@ static void load_pieces(void){
     for(int c=0;c<2;c++)for(int t=1;t<=6;t++){
         char p[128];sprintf(p,"pieces/%s%s.png",cl[c],nm[t]);
         SDL_Surface*s=IMG_Load(p);
+        /* v14: pieces are detailed PNG artwork, not the pixel font — Nearest
+           neighbor scaling gives jagged/aliased edges whenever SQ_SIZE isn't
+           an exact multiple of the source image size. Linear filtering
+           smooths curved/diagonal edges (knight, bishop, crown) at any
+           square size, which is what makes the pieces look "clear" again. */
         if(s){tex[c][t]=SDL_CreateTextureFromSurface(ren,s);SDL_SetTextureScaleMode(tex[c][t], SDL_ScaleModeLinear);SDL_FreeSurface(s);}
         else tex[c][t]=NULL;
     }
@@ -2002,7 +2023,6 @@ static const unsigned char PF[128][9]={
     ['!']={0x18,0x18,0x18,0x18,0,0,0,0x18},['?']={0x3C,0x66,0x06,0x0C,0x18,0,0,0x18},
     ['_']={0,0,0,0,0,0,0x7E},['*']= {0,0,0x66,0x3C,0xFF,0x3C,0x66,0},
 };
-/* v16: TTF text — replaces PF[] bitmap grid */
 static void dtxt(int x,int y,const char*t,int sc,int R,int Gv,int B){
     (void)sc;
     ttf_draw(font_ui,1,x,y,t,R,Gv,B);
@@ -2187,7 +2207,6 @@ static const char*HITEMS[]={
     "--- Mouse ---",
     "Drag piece   Move a piece",
     "Right-drag   Draw arrow",
-    "A          Clear drawn arrows",
     "Click FEN panel to copy FEN",
     "--- Menus ---",
     "Game      New / Load / Replay",
@@ -2195,7 +2214,7 @@ static const char*HITEMS[]={
     "Engine    Add / manage UCI",
     "C         Copy visible tab"
 };
-#define N_HELP 23
+#define N_HELP 22
 static const char*OITEMS[]={
     "Engine 1 options...",
     "Engine 2 options...",
@@ -2219,7 +2238,7 @@ static void draw_menus(int mx,int my){
     }
     SDL_SetRenderDrawColor(ren,255,165,0,255); SDL_RenderDrawLine(ren,0,MENU_H-1,menu_w,MENU_H-1);
     SDL_SetRenderDrawColor(ren,60,60,70,255); SDL_RenderDrawLine(ren,0,MENU_H-2,menu_w,MENU_H-2);
-    if(!ai_thinking){int tw=(int)(strlen(msg)*UI_ADV);if(tw<WIN_W-200)dtxt_raw(WIN_W-tw-4,14,msg,1,130,130,160);}
+    if(!ai_thinking){int tw=(int)(strlen(msg)*RAW_ADV);if(tw<WIN_W-200)dtxt_raw(WIN_W-tw-4,14,msg,1,130,130,160);}
     int mw=120,mx0=4,gap=4;
     for(int mi=0;mi<N_MENUS;mi++){
         int bx=mx0+mi*(mw+gap),by=3,bh=MENU_H-6;
@@ -2619,7 +2638,7 @@ static void draw_captured_box(int x,int y,int w,int h,int white_side,const char*
     dtxt(x,y,label,1,170,170,170);
     int *cap = white_side ? cap_w : cap_b;
     int texcol = white_side ? 0 : 1; /* colour of the captured pieces themselves */
-    int gx=x, gy=y+14, gh=h-14;
+    int gx=x, gy=y+UI_LINE_H+2, gh=h-(UI_LINE_H+2);
     int total=0; for(int t=1;t<=5;t++) total+=cap[t];
     if(total==0){ dtxt(x, gy+ (gh>20?6:0), "(none)",1,90,90,90); return; }
     /* pick an icon size that fits the box both horizontally (wrap) and vertically */
@@ -2950,8 +2969,9 @@ static void draw_eval_panel_v14(int sy, int sw, int dyn_panel_h){
 #endif
         ); if(sl) memmove(engname,sl+1,strlen(sl));
         snprintf(di,sizeof(di),"%s",engname);
-        int maxch=(int)((sw-60)/(UI_ADV)); if(maxch<8)maxch=8;
-        if((int)strlen(di)>maxch){di[maxch-3]=0;strcat(di,"...");}
+        // show full name if space — truncate only if extremely long
+        int maxch=(int)((sw-60)/UI_ADV); if(maxch<8)maxch=8;
+        if((int)strlen(di)>maxch+20){di[maxch+20-3]=0;strcat(di,"...");}
         int ecol=(show_uci&&uci_eng[show_ei].ready)?220:160;
         dtxt(FRAME_W+8+50,sy+4,di,1,ecol,ecol,ecol);
         int is_ponder_on=use_ponder; int is_th=ai_thinking||ponder_running||uci_ponder_alive||uci_ponder_waiting;
@@ -2962,8 +2982,8 @@ static void draw_eval_panel_v14(int sy, int sw, int dyn_panel_h){
     int disp_ev = evfl ? -g_best_eval : g_best_eval;
     int ev=g_best_eval; if(ev>1500)ev=1500; if(ev<-1500)ev=-1500; if(evfl) ev=-ev;
     double frac=0.5+ev/3000.0; if(frac<0)frac=0; if(frac>1)frac=1;
-    int bh=dyn_panel_h-28, bw=28;
-    int bar_x=FRAME_W+8, bar_y=sy+18;
+    int bh=dyn_panel_h-(UI_LINE_H+5)-6, bw=28;
+    int bar_x=FRAME_W+8, bar_y=sy+UI_LINE_H+5;
     {
       int bottom_h=(int)(frac*bh); int top_h=bh-bottom_h; int split=top_h;
       int bottom_is_white=!evfl;
@@ -3007,10 +3027,10 @@ static void draw_sidebar(int mx,int my){
         if(uci_eng[1].ready||eng_analysis[1].has_data) num_eng_tmp++;
     }
     int has_tourney = (tourney_active||tourney_played>0)?1:0;
-    int tourney_h = has_tourney ? (tourney_is_rr?70:60) : 0;
+    int tourney_h = has_tourney ? (tourney_is_rr?(4*(UI_LINE_H+3)+8):(3*(UI_LINE_H+3)+8)) : 0;
     int num_uniform_others = 3 + num_eng_tmp; // CAPTURED + EVAL + MOVES + engines (без турнира)
     // v14: reserve space for FEN panel (fixed height) so uniform panels fill remaining
-    const int FEN_H = 38;
+    const int FEN_H = 4 + UI_LINE_H + 2 + UI_LINE_H + 6; /* header row + fen row + padding */
     // топ маргин + ponder bar + gaps + FEN + турнирен панел (ако има)
     int avail_h = sh - 8 - 32 - num_uniform_others*6 - (has_tourney? (tourney_h+6):0) - FEN_H - 6;
     int dyn_panel_h = avail_h / (num_uniform_others>0?num_uniform_others:1);
@@ -3037,9 +3057,9 @@ static void draw_sidebar(int mx,int my){
            to the panel — pieces wrap to a new row at the right edge and are sized
            proportionally, so the panel is filled without spilling anywhere. */
         {
-            int head=18;
+            int head=UI_LINE_H+6;
             int boxh = (cap_h-head)/2;
-            if(boxh<26) boxh=26;
+            if(boxh<UI_LINE_H+28) boxh=UI_LINE_H+28;
             draw_captured_box(FRAME_W+8, sy+head,        sw-16, boxh, 1, "W taken:");
             draw_captured_box(FRAME_W+8, sy+head+boxh,  sw-16, boxh, 0, "B taken:");
         }
@@ -3051,30 +3071,34 @@ static void draw_sidebar(int mx,int my){
         orect(FRAME_W+4,sy,sw-8,tourney_h,100,180,220);
         dtxt(FRAME_W+9,sy+7,"TOURNAMENT",1,0,0,0);
         dtxt(FRAME_W+8,sy+6,"TOURNAMENT",1,100,180,220);
+        int trow = sy + 6 + (UI_LINE_H+3); /* first row below the header */
         if(tourney_is_rr){
             char ts[64];
             snprintf(ts,sizeof(ts),"RR G%d/%d", tourney_played+1, tourney_total);
-            dtxt(FRAME_W+8,sy+22,ts,1,200,200,200);
+            dtxt(FRAME_W+8,trow,ts,1,200,200,200);
             char line[96]=""; int off=0;
             for(int i=0;i<tourney_rr_num && off<90;i++){
                 const char *nm = tourney_rr_players[i]==0?"Blt": tourney_rr_players[i]==1?"E1": tourney_rr_players[i]==2?"E2":"Hum";
                 off+=snprintf(line+off,sizeof(line)-off,"%s:%.1f ", nm, tourney_rr_score[i]);
             }
-            dtxt(FRAME_W+8,sy+38,line,1,220,180,120);
+            trow += UI_LINE_H+3;
+            dtxt(FRAME_W+8,trow,line,1,220,180,120);
             if(tourney_waiting){
                 char nxt[64]; snprintf(nxt,sizeof(nxt),"Next: %d vs %d", tourney_player[0], tourney_player[1]);
-                dtxt(FRAME_W+8,sy+54,nxt,1,180,160,100);
+                trow += UI_LINE_H+3;
+                dtxt(FRAME_W+8,trow,nxt,1,180,160,100);
             }
         } else {
             char ts[64];
             sprintf(ts,"G%d/%d  E1 %.1f  E2 %.1f",
                 tourney_played+1,tourney_total,
                 tourney_score[0],tourney_score[1]);
-            dtxt(FRAME_W+8,sy+24,ts,1,200,200,200);
+            dtxt(FRAME_W+8,trow,ts,1,200,200,200);
+            trow += UI_LINE_H+3;
             if(tourney_waiting){
-                dtxt(FRAME_W+8,sy+40,"Next game soon...",1,180,160,100);
+                dtxt(FRAME_W+8,trow,"Next game soon...",1,180,160,100);
             } else {
-                dtxt(FRAME_W+8,sy+40,"CMD uniform panel",1,90,90,90);
+                dtxt(FRAME_W+8,trow,"CMD uniform panel",1,90,90,90);
             }
         }
         sy+=tourney_h+6;
@@ -3152,10 +3176,8 @@ static void draw_sidebar(int mx,int my){
             char hdr[280];
             const char *side_lbl = side==0?"White: " : side==1?"Black: " : "";
             snprintf(hdr,sizeof(hdr),"%s%s", side_lbl, ename);
-            int maxch=(int)((panel_w-40)/(UI_ADV)); if(maxch<10) maxch=10;
-            // word-aware wrap: try to split at last space before maxch so "Strong_111" stays together
+            int maxch=(int)((panel_w-40)/UI_ADV); if(maxch<10) maxch=10;
             int hdr_len=(int)strlen(hdr);
-            // first pass to count lines with word boundaries
             int tmp_off=0, tmp_lines=0;
             while(tmp_off<hdr_len && tmp_lines<3){
                 int rem=hdr_len-tmp_off; int cop=rem>maxch?maxch:rem;
@@ -3179,14 +3201,12 @@ static void draw_sidebar(int mx,int my){
                 }
                 char line[120]; if(cop>119) cop=119;
                 strncpy(line, hdr+off, cop); line[cop]=0;
-                // trim leading spaces for continuation lines (already skipped, but safety)
                 if(li>0){ char *p=line; while(*p==' ') p++; if(p!=line) memmove(line,p,strlen(p)+1); }
-                // if still too long for last line and text remains, add ...
                 if(li==hdr_lines-1 && off+cop < hdr_len){
                     int ll=(int)strlen(line); if(ll>=3){ line[ll-3]=0; strcat(line,"..."); }
                 }
-                dtxt(FRAME_W+9, sy+5+li*13, line, 1, 0,0,0);
-                dtxt(FRAME_W+8, sy+4+li*13, line, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
+                dtxt(FRAME_W+9, sy+5+li*UI_LINE_H, line, 1, 0,0,0);
+                dtxt(FRAME_W+8, sy+4+li*UI_LINE_H, line, 1, is_active_thinking? 255:200, is_active_thinking?165:200, is_active_thinking?0:200);
                 off+=cop; while(off<hdr_len && hdr[off]==' ') off++;
             }
             /* thinking indicator — colored dot per side (green for White, blue
@@ -3225,7 +3245,7 @@ static void draw_sidebar(int mx,int my){
                 if(pvsrc[0]){
                     int pv_avail=panel_w-20;
                     if(pv_avail<60) pv_avail=60;
-                    int max_ch=(int)(pv_avail/(UI_ADV));
+                    int max_ch=(int)(pv_avail/UI_ADV);
                     if(max_ch<10) max_ch=10; if(max_ch>180) max_ch=180;
                     char pv_display[200];
                     int pvlen=(int)strlen(pvsrc);
@@ -3249,24 +3269,22 @@ static void draw_sidebar(int mx,int my){
                     else if(nn>=1000000) snprintf(nbuf,sizeof(nbuf),"Nodes %.1fM", nn/1e6);
                     else if(nn>=1000) snprintf(nbuf,sizeof(nbuf),"Nodes %.0fK", nn/1000.0);
                     else snprintf(nbuf,sizeof(nbuf),"Nodes %lld", nn);
-                    int ny = sy + per_h - UI_LINE_H - 2;
+                    int ny = sy + per_h - (UI_LINE_H+4);
                     dtxt(FRAME_W+10, ny, nbuf, 1, 120,120,120);
                     char evb2[16]; snprintf(evb2,sizeof(evb2),"%s", evals);
                     if(is_blue) dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 80,130,220);
                     else dtxt(FRAME_W+panel_w-75, ny, evb2, 1, 255,165,0);
                 } else {
-                    int no_y = sy + 4 + hdr_extra + UI_LINE_H + 2;
-                    dtxt(FRAME_W+10, no_y, "(no analysis yet)", 1, 110,110,120);
+                    dtxt(FRAME_W+10, sy+4+2*(UI_LINE_H+2), "(no analysis yet)", 1, 110,110,120);
                 }
             } else {
-                int wait_y = sy + 4 + hdr_extra + UI_LINE_H + 2;
-                dtxt(FRAME_W+10, wait_y, "(waiting — not to move)", 1, 110,110,120);
+                dtxt(FRAME_W+10, sy+4+(UI_LINE_H+2), "(waiting — not to move)", 1, 110,110,120);
                 if(eng_analysis[ei].has_data){
                     char evals[24]; int evforside = evfl ? -eng_analysis[ei].eval : eng_analysis[ei].eval;
                     if(evforside>9000) strcpy(evals,"M+");
                     else if(evforside<-9000) strcpy(evals,"M-");
                     else snprintf(evals,sizeof(evals),"%+.2f", evforside/100.0);
-                    dtxt(FRAME_W+panel_w-75, sy+per_h-14, evals, 1, 120,120,120);
+                    dtxt(FRAME_W+panel_w-75, sy+per_h-(UI_LINE_H+4), evals, 1, 120,120,120);
                 }
             }
             sy+=per_h+6;
@@ -3289,16 +3307,16 @@ static void draw_sidebar(int mx,int my){
         const char *opn=current_opening_name();
         if(opn[0]){
             char ob[64]; snprintf(ob,sizeof(ob),"%s",opn);
-            int maxch=(int)((moves_w-90)/(UI_ADV)); if(maxch<10)maxch=10;
+            int maxch=(int)((moves_w-90)/UI_ADV); if(maxch<10)maxch=10;
             if((int)strlen(ob)>maxch){ob[maxch-3]=0;strcat(ob,"...");}
             dtxt(FRAME_W+8+70,sy+4,ob,1,255,220,120);
         }
     }
     static const char*PCL[7]={"","","N","B","R","Q","K"};
     int right_edge=FRAME_W+4+moves_w-8;
-    int line_h=UI_LINE_H+1;
-    int panel_inner_y=sy+4+UI_LINE_H+2;
-    int panel_inner_h=dyn_panel_h-(panel_inner_y-sy)-2;
+    int line_h=14;
+    int panel_inner_y=sy+18;
+    int panel_inner_h=dyn_panel_h-22;
     int lines_avail=panel_inner_h/line_h; if(lines_avail<1)lines_avail=1;
     /* v12.4: horizontal flow instead of a fixed two-column grid — wraps by actual
        text width so it always fits the panel, however narrow, instead of needing
@@ -3317,7 +3335,7 @@ static void draw_sidebar(int mx,int my){
         int cx=FRAME_W+8, lines=1;
         for(int i=start;i<hist_n;i++){
             char tok[20]; MV_TOKEN(i,tok);
-            int tw=(int)(int)(strlen(tok)*UI_ADV+8*UI_TEXT_SCALE);
+            int tw=(int)(strlen(tok)*UI_ADV+UI_ADV);
             if(cx+tw>right_edge){cx=FRAME_W+8;lines++;}
             cx+=tw;
         }
@@ -3327,7 +3345,7 @@ static void draw_sidebar(int mx,int my){
     int cur_y=panel_inner_y;
     for(int i=start;i<hist_n;i++){
         char tok[20]; MV_TOKEN(i,tok);
-        int tw=(int)(int)(strlen(tok)*UI_ADV+8*UI_TEXT_SCALE);
+        int tw=(int)(strlen(tok)*UI_ADV+UI_ADV);
         if(cx+tw>right_edge){ cx=FRAME_W+8; cur_y+=line_h; if(cur_y+line_h > sy+dyn_panel_h) break; }
         int R2=170,G2=170,B2=170;if(i==hist_n-1){R2=255;G2=165;B2=0;}
         dtxt(cx,cur_y,tok,1,R2,G2,B2);
@@ -3353,7 +3371,7 @@ static void draw_sidebar(int mx,int my){
         dtxt(copy_x, copy_y, copy_lbl,1, copy_hover?255:180, copy_hover?255:200, copy_hover?255:180);
         char fen_disp[256];
         int avail_w = fw - 12;
-        int maxch = (int)(avail_w / (UI_ADV));
+        int maxch = (int)(avail_w / UI_ADV);
         if(maxch<10) maxch=10;
         if(maxch> (int)sizeof(fen_disp)-1) maxch=sizeof(fen_disp)-1;
         strncpy(fen_disp, cached_fen, maxch);
@@ -3361,14 +3379,14 @@ static void draw_sidebar(int mx,int my){
         if((int)strlen(cached_fen) > maxch){
             if(maxch>=3){ fen_disp[maxch-3]='.'; fen_disp[maxch-2]='.'; fen_disp[maxch-1]='.'; }
         }
-        dtxt(fx+6, fy+18, fen_disp,1, is_hover?255:200, is_hover?255:200, is_hover?255:200);
+        dtxt(fx+6, fy+4+UI_LINE_H+2, fen_disp,1, is_hover?255:200, is_hover?255:200, is_hover?255:200);
         sy+=fh+6;
     }
     /* v13: Enhanced ponder status indicator at bottom — clearly shows ON/OFF + RUNNING */
     {
         int ponder_any = ponder_running || uci_ponder_alive || uci_ponder_waiting;
         int by = MENU_H + sh - 32;
-        int bx = FRAME_W+4, bw = sw-8, bh=24;
+        int bx = FRAME_W+4, bw = sw-8, bh=UI_LINE_H+8;
         frect(bx, by, bw, bh, ponder_any?16:12, ponder_any?12:12, 12);
         if(ponder_any) orect(bx,by,bw,bh, 255,165,0);
         else if(!use_ponder) orect(bx,by,bw,bh, 80,80,80);
@@ -3400,7 +3418,7 @@ static void draw_bottom_log(void){
     SDL_SetRenderDrawColor(ren,70,70,70,255);
     SDL_RenderDrawLine(ren,0,y0,rw,y0);
     // tabs — Out1 / Out2 = per-engine raw UCI, Log = a1 corner aligned
-    int tab_w=70, tab_h=18;
+    int tab_w=70, tab_h=RAW_LINE_H+8;
     for(int t=0;t<3;t++){
         int tx=COORD_W + t*(tab_w+6), ty=y0;
         int active=(t==bottom_log_tab);
@@ -3413,16 +3431,16 @@ static void draw_bottom_log(void){
     if(bottom_log_tab==2){
         // LOG tab — game/status messages only (engine traffic lives in Out1/Out2;
         // moves are shown in the MOVES panel, not here).
-        int ly=y0+22;
-        int box_h=LOG_H-26;
+        int ly=y0+tab_h+4;
+        int box_h=LOG_H-(tab_h+4)-4;
         frect(COORD_W,ly,rw - COORD_W - 8,box_h,0,0,0);
         orect(COORD_W,ly,rw - COORD_W - 8,box_h,55,55,55);
-        int line_h=RAW_LINE_H+2;
+        int line_h=12;
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
         int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_engine(bottom_log_lines[i])==-1) cnt++;
         int show_n = cnt<max_lines ? cnt : max_lines;
         int box_w = rw - COORD_W - 8;
-        int maxch = (box_w - 12)/RAW_ADV; if(maxch<20) maxch=20; if(maxch>120) maxch=120;
+        int maxch = (int)((box_w - 12)/RAW_ADV); if(maxch<20) maxch=20; if(maxch>120) maxch=120;
         int drawn=0;
         for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
             char *ln = bottom_log_lines[i];
@@ -3440,16 +3458,16 @@ static void draw_bottom_log(void){
        RECV/SEND/ENGINE lines. */
     {
         int out_ei = (bottom_log_tab==0)?0:1;
-        int ly=y0+22;
-        int box_h=LOG_H-26;
+        int ly=y0+tab_h+4;
+        int box_h=LOG_H-(tab_h+4)-4;
         frect(COORD_W,ly,rw - COORD_W - 8,box_h,0,0,0);
         orect(COORD_W,ly,rw - COORD_W - 8,box_h,55,55,55);
-        int line_h=RAW_LINE_H+2;
+        int line_h=12;
         int max_lines=(box_h-8)/line_h; if(max_lines<1) max_lines=1;
         int cnt=0; for(int i=0;i<bottom_log_n;i++) if(bottom_log_engine(bottom_log_lines[i])==out_ei) cnt++;
         int show_n = cnt<max_lines ? cnt : max_lines;
         int box_w2 = rw - COORD_W - 8;
-        int maxch2 = (box_w2 - 12)/RAW_ADV; if(maxch2<20) maxch2=20; if(maxch2>120) maxch2=120;
+        int maxch2 = (int)((box_w2 - 12)/RAW_ADV); if(maxch2<20) maxch2=20; if(maxch2>120) maxch2=120;
         int drawn=0;
         for(int i=bottom_log_n-1; i>=0 && drawn<show_n; i--){
             char *ln = bottom_log_lines[i];
@@ -5683,7 +5701,12 @@ static void draw_uci_options_dialog(void){
     if(slash2&&(!slash||slash2>slash))slash=slash2;
     if(slash) memmove(ename,slash+1,strlen(slash));
     char title[128]; snprintf(title,sizeof(title),"UCI Options — Engine %d: %s",ei+1,ename);
-    { int title_max_px=(dw-190)-14-10; int title_maxch=(int)(title_max_px/RAW_ADV); if(title_maxch<10) title_maxch=10; if((int)strlen(title)>title_maxch){ title[title_maxch-3]=0; strcat(title,"..."); } }
+    /* v14: the title previously had no width limit and would run under the
+       "Engine 1/2" tab buttons on the right, hiding the tail of longer
+       engine filenames. Truncate to the space actually available. */
+    int title_max_px = (dw-190) - 14 - 10; /* left edge of tabs minus title x minus margin */
+    int title_maxch = (int)(title_max_px/RAW_ADV); if(title_maxch<10) title_maxch=10;
+    if((int)strlen(title)>title_maxch){ title[title_maxch-3]=0; strcat(title,"..."); }
     dtxt_raw(dx+14,dy+11,title,1,240,220,180);
     dtxt_raw(dx+13,dy+10,title,1,255,240,200);
     /* engine tab switcher — pill style */
@@ -5737,7 +5760,7 @@ static void draw_uci_options_dialog(void){
                 case UOPT_STRING:snprintf(buf,sizeof(buf),"%s: %s",o->name,o->cur_str[0]?o->cur_str:"<empty>"); break;
                 case UOPT_BUTTON:snprintf(buf,sizeof(buf),"%s",o->name); break;
             }
-            int maxch=(dw-54)/RAW_ADV; if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
+            int maxch=(int)((dw-54)/RAW_ADV); if((int)strlen(buf)>maxch){buf[maxch-3]=0;strcat(buf,"...");}
             int R=220,G=220,B=230;
             if(o->type==UOPT_BUTTON){R=255;G=220;B=120;}
             else if(o->type==UOPT_SPIN){R=180;G=220;B=240;}
@@ -5799,7 +5822,7 @@ int main(void){
     real_w=WIN_W; real_h=WIN_H;
     ren=SDL_CreateRenderer(win,-1,SDL_RENDERER_ACCELERATED);
     SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
-    init_fonts();
+    init_fonts(); /* v14: TTF fonts — must load before any dtxt()/dtxt_raw() call */
     load_pieces();
 #ifdef USE_BOOK
     init_br();
