@@ -5696,17 +5696,12 @@ static void draw_uci_options_dialog(void){
         SDL_RenderDrawLine(ren,dx,dy+i,dx+dw,dy+i);
     }
     orect(dx,dy,dw,36,60,60,80);
-    char ename[64]; strncpy(ename,uci_eng[ei].path[0]?uci_eng[ei].path:"(not loaded)",63);
+    char ename[256]; strncpy(ename,uci_eng[ei].path[0]?uci_eng[ei].path:"(not loaded)",255); ename[255]=0;
     char *slash=strrchr(ename,'/'); char *slash2=strrchr(ename,'\\');
     if(slash2&&(!slash||slash2>slash))slash=slash2;
     if(slash) memmove(ename,slash+1,strlen(slash));
-    char title[128]; snprintf(title,sizeof(title),"UCI Options — Engine %d: %s",ei+1,ename);
-    /* v14: the title previously had no width limit and would run under the
-       "Engine 1/2" tab buttons on the right, hiding the tail of longer
-       engine filenames. Truncate to the space actually available. */
-    int title_max_px = (dw-190) - 14 - 10; /* left edge of tabs minus title x minus margin */
-    int title_maxch = (int)(title_max_px/RAW_ADV); if(title_maxch<10) title_maxch=10;
-    if((int)strlen(title)>title_maxch){ title[title_maxch-3]=0; strcat(title,"..."); }
+    char title[256]; snprintf(title,sizeof(title),"UCI Options — Engine %d: %s",ei+1,ename);
+    // show full name if space — truncate only if extremely long to avoid overlapping tabs
     dtxt_raw(dx+14,dy+11,title,1,240,220,180);
     dtxt_raw(dx+13,dy+10,title,1,255,240,200);
     /* engine tab switcher — pill style */
