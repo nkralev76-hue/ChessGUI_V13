@@ -3398,10 +3398,18 @@ static void draw_sidebar(int mx,int my){
             dtxt(bx+8 + (int)(strlen(pbuf)*UI_ADV) + 8, by+7, "(Settings)", 1, 110,110,110);
         } else if(ponder_any){
             int blink = (SDL_GetTicks()/350)%2;
-            snprintf(pbuf,sizeof(pbuf),"PONDER ON %s d%d", blink?"[*]":"[ ]", g_best_depth);
-            dtxt(bx+8, by+7, pbuf, 1, 255,180,40);
-            if(uci_ponder_alive) dtxt(bx+8+ (int)(strlen(pbuf)*UI_ADV), by+7, " UCI", 1, 255,200,80);
-            else if(ponder_running) dtxt(bx+8+ (int)(strlen(pbuf)*UI_ADV), by+7, " CPU", 1, 200,200,200);
+            // fixed brackets, animate only star inside so surrounding text doesn't shift
+            const char *pre="PONDER ON [";
+            dtxt(bx+8, by+7, pre, 1, 255,180,40);
+            int pre_w=(int)(strlen(pre)*UI_ADV);
+            dtxt(bx+8+pre_w, by+7, blink?"*":" ", 1, 255,180,40);
+            dtxt(bx+8+pre_w+(int)UI_ADV, by+7, "]", 1, 255,180,40);
+            char rest[16]; snprintf(rest,sizeof(rest)," d%d", g_best_depth);
+            int rest_x=bx+8+pre_w+(int)(2*UI_ADV);
+            dtxt(rest_x, by+7, rest, 1, 255,180,40);
+            int after_w=rest_x + (int)(strlen(rest)*UI_ADV);
+            if(uci_ponder_alive) dtxt(after_w, by+7, " UCI", 1, 255,200,80);
+            else if(ponder_running) dtxt(after_w, by+7, " CPU", 1, 200,200,200);
         } else {
             snprintf(pbuf,sizeof(pbuf),"PONDER ON [IDLE]");
             dtxt(bx+8, by+7, pbuf, 1, 180,160,120);
