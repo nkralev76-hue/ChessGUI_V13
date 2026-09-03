@@ -3510,9 +3510,7 @@ static void render(int mx,int my){
         int bx = BOARD_OX + 6*SQ_SIZE - cw/2;
         if(wx < fx+8) wx = fx+8;
         if(bx + cw > fx+fw-8) bx = fx+fw-8 - cw;
-        dtxt_raw(wx-2, cy-12, "W",1, 180,180,180);
         draw_clock(wx+10, cy, clk_w, turn==WHITE&&!game_over);
-        dtxt_raw(bx-14, cy-12, "B",1, 180,180,180);
         draw_clock(bx, cy, clk_b, turn==BLACK&&!game_over);
     }
     if(cur_theme<=4) orect(BOARD_OX-2,BOARD_OY-2,BRD+4,BRD+4, 255,165,0); /* orange accent for CMD */
