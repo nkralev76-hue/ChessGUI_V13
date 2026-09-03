@@ -189,6 +189,57 @@ static int retro_coords_big = 0; /* user requested: no big coords */
 static int retro_piece_style = 0;
 /* v14: UI text scale — 1.2 requested for readability */
 static double UI_TEXT_SCALE = 1.2;
+/* ---- GUI state ---- */
+BBoard B;
+int turn=WHITE,sel_r=-1,sel_c=-1,game_over=0,player_color=WHITE;
+int lm_fr=-1,lm_fc=-1,lm_tr=-1,lm_tc=-1;
+int promo_pending=0,promo_fr,promo_fc,promo_tr,promo_tc;
+int flip_board=0,sound_on=1,aivsai=0,draw_offered=0,use_book=1,use_ponder=1;
+
+char msg[256]="Your move (White)";
+Uint32 clk_w,clk_b,last_ms;
+Uint32 base_time = 5*60*1000;
+Uint32 increment = 0;
+int time_control_type = 0;
+/* v12.9: the clocks stay frozen until the FIRST move of the game is played.
+   Without this, when the CPU plays White the clock starts counting down
+   during the engine's first think, so a selected 3-min game visibly
+   "starts" at ~2:48 and a 5-min one at ~4:xx (on slow machines the first
+   search iteration alone can eat 10-60s). Now the clock always shows the
+   exact selected time at game start and only starts ticking after move 1. */
+int clock_started = 0;
+
+int cap_w[7],cap_b[7];
+typedef struct { Move m; BBoard bb; int turn; uint64_t hash; } Hist;
+#define MAX_HIST 400
+Hist hist[MAX_HIST];int hist_n=0;
+/* PGN replay */
+static int pgn_replay_mode=0;
+static int pgn_replay_index=0;
+static Move *pgn_replay_moves=NULL;
+static int pgn_replay_move_count=0;
+static int pgn_replay_auto=0;
+static Uint32 pgn_replay_auto_last=0;
+#define PGN_REPLAY_DELAY 700
+int open_menu=-1;
+
+/* v12: slide animation for moved pieces */
+int anim_active=0;
+Uint32 anim_start=0;
+#define ANIM_MS 140
+int anim_piece=0;
+int anim_from_r=-1,anim_from_c=-1,anim_to_r=-1,anim_to_c=-1;
+
+/* v12: drag-and-drop */
+int drag_active=0,drag_r=-1,drag_c=-1,drag_piece=0,drag_mx=0,drag_my=0;
+
+/* v12: eval history for sidebar sparkline (indexed like hist[]) */
+#define EVAL_HIST_MAX MAX_HIST
+int eval_hist[EVAL_HIST_MAX];
+
+SDL_Window *win=NULL;
+SDL_Renderer *ren=NULL;
+
 /* v16: TTF font + measured advances — replaces per-call UI_ADV.
     RAW_ADV/UI_ADV are the average character advance in pixels measured
     from the loaded TTF at open time; fall back to 9.0 so every layout
@@ -253,57 +304,6 @@ static void init_fonts(void){
         UI_ADV=(double)w/(double)strlen(sample); UI_LINE_H=TTF_FontHeight(font_ui);
     }
 }
-
-/* ---- GUI state ---- */
-BBoard B;
-int turn=WHITE,sel_r=-1,sel_c=-1,game_over=0,player_color=WHITE;
-int lm_fr=-1,lm_fc=-1,lm_tr=-1,lm_tc=-1;
-int promo_pending=0,promo_fr,promo_fc,promo_tr,promo_tc;
-int flip_board=0,sound_on=1,aivsai=0,draw_offered=0,use_book=1,use_ponder=1;
-
-char msg[256]="Your move (White)";
-Uint32 clk_w,clk_b,last_ms;
-Uint32 base_time = 5*60*1000;
-Uint32 increment = 0;
-int time_control_type = 0;
-/* v12.9: the clocks stay frozen until the FIRST move of the game is played.
-   Without this, when the CPU plays White the clock starts counting down
-   during the engine's first think, so a selected 3-min game visibly
-   "starts" at ~2:48 and a 5-min one at ~4:xx (on slow machines the first
-   search iteration alone can eat 10-60s). Now the clock always shows the
-   exact selected time at game start and only starts ticking after move 1. */
-int clock_started = 0;
-
-int cap_w[7],cap_b[7];
-typedef struct { Move m; BBoard bb; int turn; uint64_t hash; } Hist;
-#define MAX_HIST 400
-Hist hist[MAX_HIST];int hist_n=0;
-/* PGN replay */
-static int pgn_replay_mode=0;
-static int pgn_replay_index=0;
-static Move *pgn_replay_moves=NULL;
-static int pgn_replay_move_count=0;
-static int pgn_replay_auto=0;
-static Uint32 pgn_replay_auto_last=0;
-#define PGN_REPLAY_DELAY 700
-int open_menu=-1;
-
-/* v12: slide animation for moved pieces */
-int anim_active=0;
-Uint32 anim_start=0;
-#define ANIM_MS 140
-int anim_piece=0;
-int anim_from_r=-1,anim_from_c=-1,anim_to_r=-1,anim_to_c=-1;
-
-/* v12: drag-and-drop */
-int drag_active=0,drag_r=-1,drag_c=-1,drag_piece=0,drag_mx=0,drag_my=0;
-
-/* v12: eval history for sidebar sparkline (indexed like hist[]) */
-#define EVAL_HIST_MAX MAX_HIST
-int eval_hist[EVAL_HIST_MAX];
-
-SDL_Window *win=NULL;
-SDL_Renderer *ren=NULL;
 SDL_AudioDeviceID aud=0;
 SDL_Texture *tex[2][7];
 
