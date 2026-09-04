@@ -4106,7 +4106,7 @@ static void start_analysis(void) {
     ai_thinking=1; ai_done=0; ai_is_ponder=0;
     SDL_CreateThread(analysis_thread_func,"Analysis",NULL);
     strcpy(msg,"Analyzing... (I to stop)");
-    SDL_SetWindowTitle(win,"Chess GUI v10 - Analyzing");
+    SDL_SetWindowTitle(win,"Chess GUI v13 - Analyzing");
 }
 
 static void stop_analysis(void) {
@@ -4114,7 +4114,7 @@ static void stop_analysis(void) {
     int wait=0;
     while(ai_thinking&&wait<400){SDL_Delay(5);wait++;}
     ai_cancel=0; stop_search=0; ai_thinking=0; ai_done=0;
-    SDL_SetWindowTitle(win,"Chess GUI v10");
+    SDL_SetWindowTitle(win,"Chess GUI v13");
 }
 
 
