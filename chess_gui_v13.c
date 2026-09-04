@@ -3315,9 +3315,9 @@ static void draw_sidebar(int mx,int my){
     }
     static const char*PCL[7]={"","","N","B","R","Q","K"};
     int right_edge=FRAME_W+4+moves_w-8;
-    int line_h=14;
-    int panel_inner_y=sy+18;
-    int panel_inner_h=dyn_panel_h-22;
+    int line_h=UI_LINE_H+1;
+    int panel_inner_y=sy+4+UI_LINE_H+8;
+    int panel_inner_h=dyn_panel_h-(panel_inner_y-sy)-2;
     int lines_avail=panel_inner_h/line_h; if(lines_avail<1)lines_avail=1;
     /* v12.4: horizontal flow instead of a fixed two-column grid — wraps by actual
        text width so it always fits the panel, however narrow, instead of needing
