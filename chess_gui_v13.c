@@ -6019,8 +6019,14 @@ int main(void){
                     else{tourney_total=10;tourney_player[0]=1;tourney_player[1]=2;tourney_start_now();}
                 }
                 /* Replay: arrow keys */
-                if(k==SDLK_LEFT && !ctrl){pgn_replay_auto=0;pgn_replay_prev();}
-                if(k==SDLK_RIGHT && !ctrl){pgn_replay_auto=0;pgn_replay_next();}
+                if(k==SDLK_LEFT && !ctrl){
+                    if(pgn_replay_mode){pgn_replay_auto=0;pgn_replay_prev();}
+                    else {int rh2=real_h>0?real_h:WIN_H; if(my>=rh2-LOG_H) bottom_log_tab=(bottom_log_tab+2)%3;}
+                }
+                if(k==SDLK_RIGHT && !ctrl){
+                    if(pgn_replay_mode){pgn_replay_auto=0;pgn_replay_next();}
+                    else {int rh2=real_h>0?real_h:WIN_H; if(my>=rh2-LOG_H) bottom_log_tab=(bottom_log_tab+1)%3;}
+                }
                 if(k==SDLK_HOME && !ctrl){pgn_replay_auto=0;pgn_replay_first();}
                 if(k==SDLK_END && !ctrl){pgn_replay_auto=0;pgn_replay_last();}
                 if(k==SDLK_g && !ctrl) pgn_replay_auto_play();
@@ -6220,6 +6226,13 @@ int main(void){
             if(e.type==SDL_MOUSEWHEEL && (open_menu==4 || uci_opts_dialog_active)){
                 if(e.wheel.y > 0) options_scroll = MAX(0, options_scroll - 1);
                 else if(e.wheel.y < 0) options_scroll++;
+            } else if(e.type==SDL_MOUSEWHEEL){
+                int rw2=real_w>0?real_w:WIN_W, rh2=real_h>0?real_h:WIN_H;
+                int y0=rh2-LOG_H;
+                if(my>=y0 && my<rh2){
+                    if(e.wheel.y>0) bottom_log_tab=(bottom_log_tab+2)%3;
+                    else if(e.wheel.y<0) bottom_log_tab=(bottom_log_tab+1)%3;
+                }
             }
         }
         SDL_SetRenderDrawColor(ren,0,0,0,255);SDL_RenderClear(ren);
