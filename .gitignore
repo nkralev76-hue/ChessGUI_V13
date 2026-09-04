@@ -8,6 +8,7 @@
 *.out
 *.zip
 *.7z
+*.res
 # Portable distribution — tracked for all machines
 !Ferz_v13_dist/*.exe
 !Ferz_v13_dist/*.dll
