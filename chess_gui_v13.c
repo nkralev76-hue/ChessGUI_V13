@@ -2207,6 +2207,7 @@ static const char*HITEMS[]={
     "--- Mouse ---",
     "Drag piece   Move a piece",
     "Right-drag   Draw arrow",
+    "A          Clear drawn arrows",
     "Click FEN panel to copy FEN",
     "--- Menus ---",
     "Game      New / Load / Replay",
@@ -2214,7 +2215,7 @@ static const char*HITEMS[]={
     "Engine    Add / manage UCI",
     "C         Copy visible tab"
 };
-#define N_HELP 22
+#define N_HELP 23
 static const char*OITEMS[]={
     "Engine 1 options...",
     "Engine 2 options...",
@@ -5859,7 +5860,20 @@ int main(void){
         }
         while(SDL_PollEvent(&e)){
             if(e.type==SDL_QUIT){run=0;stop_ai();stop_pondering();break;}
-            if(e.type==SDL_MOUSEMOTION){mx=e.motion.x;my=e.motion.y;if(arrow_dragging){arrow_mx=mx;arrow_my=my;}if(drag_active){drag_mx=mx;drag_my=my;}}
+            if(e.type==SDL_MOUSEMOTION){mx=e.motion.x;my=e.motion.y;if(arrow_dragging){arrow_mx=mx;arrow_my=my;}if(drag_active){drag_mx=mx;drag_my=my;}
+                if(open_menu>=0){
+                    int mw2=120,mx02=4,gap2=4;
+                    int overBar=-1;
+                    for(int mi2=0;mi2<N_MENUS;mi2++){int bx2=mx02+mi2*(mw2+gap2); if(mx>=bx2&&mx<=bx2+mw2&&my>=3&&my<=MENU_H-3) overBar=mi2;}
+                    if(overBar>=0 && overBar!=open_menu) open_menu=overBar;
+                    else if(overBar==-1){
+                        int mi=open_menu,n=menu_count(mi),ih=26,iw=(mi==5)?320:220,ix=mx02+mi*(mw2+gap2),iy=MENU_H;
+                        if(ix+iw>WIN_W) ix=WIN_W-iw-2;
+                        int overDrop=(mx>=ix&&mx<ix+iw&&my>=iy&&my<iy+4+n*ih);
+                        if(!overDrop) open_menu=-1;
+                    }
+                }
+            }
             if(e.type==SDL_KEYDOWN){
                 SDL_Keycode k=e.key.keysym.sym;int ctrl=(e.key.keysym.mod&KMOD_CTRL);
                 /* v12.3: UCI options window keyboard */
