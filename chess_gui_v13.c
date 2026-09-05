@@ -3027,6 +3027,15 @@ static void draw_sidebar(int mx,int my){
         if(uci_eng[0].ready||eng_analysis[0].has_data) num_eng_tmp++;
         if(uci_eng[1].ready||eng_analysis[1].has_data) num_eng_tmp++;
     }
+    /* analysis always runs on the built-in engine -> keep its panel visible */
+    if(analysis_mode){
+        int hbi = (tourney_active||aivsai) ? 0 : 1;
+        if(tourney_active||aivsai){
+            if(tourney_player[0]!=3 && tourney_player[0]==0) hbi=1;
+            if(tourney_player[1]!=3 && tourney_player[1]==0) hbi=1;
+        }
+        if(!hbi) num_eng_tmp++;
+    }
     int has_tourney = (tourney_active||tourney_played>0)?1:0;
     int tourney_h = has_tourney ? (tourney_is_rr?(4*(UI_LINE_H+3)+8):(3*(UI_LINE_H+3)+8)) : 0;
     int num_uniform_others = 3 + num_eng_tmp; // CAPTURED + EVAL + MOVES + engines (без турнира)
@@ -3138,6 +3147,14 @@ static void draw_sidebar(int mx,int my){
             if(uci_eng[0].ready||eng_analysis[0].has_data){ panel_slot[npan]=0; panel_side[npan]=-1; npan++; }
             if(uci_eng[1].ready||eng_analysis[1].has_data){ panel_slot[npan]=1; panel_side[npan]=-1; npan++; }
         }
+        /* v13 FIX: during analysis the built-in engine runs the infinite search,
+           so always keep its panel on screen even when no side owns an engine
+           (e.g. a human-vs-human tournament where npan would otherwise be 0). */
+        if(analysis_mode){
+            int has_bp=0;
+            for(int _p=0;_p<npan;_p++) if(panel_slot[_p]==ENG_BUILTIN_IDX){ has_bp=1; break; }
+            if(!has_bp && npan<3){ panel_slot[npan]=ENG_BUILTIN_IDX; panel_side[npan]=-1; npan++; }
+        }
         int per_h = dyn_panel_h; /* uniform, fills the sidebar together with the other panels */
         int evfl = flip_board ^ (player_color==BLACK ? 1 : 0);
         int on_move_slot = -1; /* used in NORMAL mode; in aivsai/tourney on_move_side drives the highlight */
@@ -3153,9 +3170,11 @@ static void draw_sidebar(int mx,int my){
             int ei = panel_slot[pi];
             int side = panel_side[pi];
             /* CMD panel — black with orange when thinking, gray otherwise */
-            int is_active_thinking = (tourney_active||aivsai)
-                ? (side>=0 && side==on_move_side)
-                : (eng_analysis[ei].is_thinking || (ai_thinking && ei==on_move_slot));
+            int is_active_thinking = analysis_mode && ei==ENG_BUILTIN_IDX
+                ? 1
+                : ((tourney_active||aivsai)
+                    ? (side>=0 && side==on_move_side)
+                    : (eng_analysis[ei].is_thinking || (ai_thinking && ei==on_move_slot)));
             int is_blue = (side==1 || ei==1);
             int bgR = is_active_thinking? (is_blue? 8:16):0, bgG=is_active_thinking? (is_blue?12:12):0, bgB=is_active_thinking? (is_blue?18:0):0;
             int borR=is_active_thinking? (is_blue? 80:255):60, borG=is_active_thinking? (is_blue?130:165):60, borB=is_active_thinking? (is_blue?220:0):60;
