@@ -195,7 +195,7 @@ BBoard B;
 int turn=WHITE,sel_r=-1,sel_c=-1,game_over=0,player_color=WHITE;
 int lm_fr=-1,lm_fc=-1,lm_tr=-1,lm_tc=-1;
 int promo_pending=0,promo_fr,promo_fc,promo_tr,promo_tc;
-int flip_board=0,sound_on=1,aivsai=0,draw_offered=0,use_book=1,use_ponder=1;
+int flip_board=0,sound_on=1,aivsai=0,draw_offered=0,use_book=1,use_ponder=1,both_human=0;
 
 char msg[256]="Your move (White)";
 Uint32 clk_w,clk_b,last_ms;
@@ -2448,13 +2448,13 @@ static void handle_menu(int mx,int my){
             if(mx>=ix&&mx<ix+iw&&my>=iy2&&my<iy2+ih){
                 open_menu=-1;
                 if(mi==0){
-                    if(ii==0){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=WHITE;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    if(ii==0){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=WHITE;flip_board=0;aivsai=0;both_human=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"Your move (White)");}
-                    else if(ii==1){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=BLACK;flip_board=0;aivsai=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    else if(ii==1){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=BLACK;flip_board=0;aivsai=0;both_human=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"Computer thinking...");}
-                    else if(ii==2){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=WHITE;aivsai=1;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
+                    else if(ii==2){stop_analysis();stop_pondering();stop_ai();pgn_replay_mode=0;pgn_replay_auto=0;player_color=WHITE;aivsai=1;both_human=0;tourney_active=0;tourney_waiting=0;init_board();turn=WHITE;game_start_fen[0]=0;
                         for(int _ei=0;_ei<MAX_ENGINES;_ei++){uci_send_raw(_ei,"ucinewgame");uci_disable_engine_pb(_ei);}
                         strcpy(msg,"AI vs AI");}
                     else if(ii==3){open_menu=-1;fen_dialog_active=1;fen_dialog_buf[0]=0;fen_dialog_len=0;SDL_StartTextInput();}
@@ -2477,7 +2477,7 @@ static void handle_menu(int mx,int my){
                             } else strcpy(msg,"Invalid FEN in clipboard!");
                         } else { if(clip) SDL_free(clip); strcpy(msg,"Clipboard empty!"); }
                     }
-                    else if(ii==6){stop_pondering();if(!ai_thinking){do_undo();if(hist_n>0&&turn!=player_color)do_undo();}}
+                    else if(ii==6){stop_pondering();if(!ai_thinking){do_undo();if(!both_human && hist_n>0&&turn!=player_color)do_undo();}}
                     else if(ii==7){draw_offered=1;sprintf(msg,"Draw offered");SDL_SetWindowTitle(win,msg);}
                     else if(ii==8){game_over=1;strcpy(msg,player_color==WHITE?"You resign":"Computer wins");stop_analysis();stop_pondering();stop_ai();}
                     else if(ii==9) save_pgn();
@@ -3697,7 +3697,7 @@ static void apply(Move*m){
     check_end();
     if(game_over) cancel_uci_ponder(); /* v12.7: stop any UCI ponder when the game ends */
     else uci_ponder_opponent_moved(m); /* v12.7: opponent moved — UCI ponder hit or miss */
-    if(!game_over)sprintf(msg,turn==player_color?"Your move":"Computer thinking...");
+    if(!game_over)sprintf(msg,both_human?"Your move":(turn==player_color?"Your move":"Computer thinking..."));
 }
 
 /* v12: shared move-attempt logic, used by classic click-click AND drag-drop */
@@ -3817,7 +3817,7 @@ static void do_undo(void){
     if(hist_n>0){lm_fr=hist[hist_n-1].m.fr;lm_fc=hist[hist_n-1].m.fc;lm_tr=hist[hist_n-1].m.tr;lm_tc=hist[hist_n-1].m.tc;}
     else lm_fr=lm_fc=lm_tr=lm_tc=-1;
     sel_r=sel_c=-1;game_over=0;draw_offered=0;
-    sprintf(msg,turn==player_color?"Your move":"Computer thinking...");
+    sprintf(msg,both_human?"Your move":(turn==player_color?"Your move":"Computer thinking..."));
 }
 
 
@@ -5433,7 +5433,7 @@ static void tourney_stop(void){
     stop_analysis();stop_pondering();stop_ai();
     for(int _ei=0;_ei<MAX_ENGINES;_ei++)
         if(uci_eng[_ei].ready && UCI_VALID(_ei)) uci_send_raw(_ei,"stop");
-    tourney_active=0;tourney_waiting=0; tourney_is_rr=0;
+    tourney_active=0;tourney_waiting=0; tourney_is_rr=0; both_human=0;
     if(aivsai){ aivsai=0; player_color=turn; }
     if(tourney_is_rr) snprintf(msg,sizeof(msg),"RR Tournament stopped.");
     else snprintf(msg,sizeof(msg),"Tournament stopped. E1:%.1f E2:%.1f",tourney_score[0],tourney_score[1]);
@@ -5455,6 +5455,7 @@ static void tourney_begin_game(void){
 
     /* Set up player mode based on tourney_player[] */
     int w=tourney_player[0], b=tourney_player[1];
+    both_human = (w==3 && b==3);
     if(w==3){         /* white is human */
         aivsai=0; player_color=WHITE;
     } else if(b==3){  /* black is human */
@@ -5466,8 +5467,8 @@ static void tourney_begin_game(void){
     int gn=tourney_played+1;
     sprintf(msg,"Tournament game %d/%d",gn,tourney_total);
 
-    /* Kick off the first engine move if white is an engine */
-    if(w!=2) start_ai_move();
+    /* Kick off the first engine move if white is an engine (not human) */
+    if(w!=3) start_ai_move();
 }
 
 /* v13: if a side is still the built-in engine (0) but a real UCI engine is
@@ -6272,8 +6273,12 @@ int main(void){
                 stop_pondering();
             }
             if((aivsai||turn!=player_color) && !pgn_replay_mode){
-                if(!ai_thinking&&!ai_done)start_ai_move();
-                if(ai_done){ai_done=0;ai_is_ponder=0;apply_ai();}
+                /* v13 FIX: if both players are human (tourney W:Human B:Human),
+                   don't start engine for either side */
+                if(!both_human) {
+                    if(!ai_thinking&&!ai_done)start_ai_move();
+                    if(ai_done){ai_done=0;ai_is_ponder=0;apply_ai();}
+                }
             }
         }
         /* v8.3.1: Analysis mode - show indicator, no ai_done apply */
