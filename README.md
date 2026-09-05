@@ -1,10 +1,10 @@
 # Ferz — CMD Chess GUI (v13)
 
-Малка графична среда за игра на шах с SDL2, с поддръжка на два UCI
-двигателя едновременно, вграден двигател (StrongEngine), opening book,
-анализ на ходове, ponder и теми.
+A small graphical chess environment built with SDL2, supporting two UCI
+engines simultaneously, a built-in engine (StrongEngine), opening book,
+move analysis, ponder and themes.
 
-## Компилация (Windows, MinGW64)
+## Compilation (Windows, MinGW64)
 
 ```bat
 gcc -O3 -march=native -mpopcnt -mavx2 -DUSE_BOOK ^
@@ -12,10 +12,11 @@ gcc -O3 -march=native -mpopcnt -mavx2 -DUSE_BOOK ^
     -lSDL2 -lSDL2_image -lm -lcomdlg32
 ```
 
-Нужни са `SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `zlib1.dll`
-(в папката с .exe) и папката `pieces/` с фигурите. `book.h` е нужен
-само по време на компилация.
+Required: `SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `zlib1.dll`
+(in the folder with the .exe) and the `pieces/` folder with the piece
+graphics. `book.h` is only needed at compile time.
 
-## Лиценз
+## License
 
-GPL-3.0 — свободен за ползване и промяна, но разпространените промени трябва да останат под GPL. Виж `LICENSE`.
+GPL-3.0 — free to use and modify, but distributed changes must remain
+under GPL. See `LICENSE`.
