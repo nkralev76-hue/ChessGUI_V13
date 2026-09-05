@@ -6176,7 +6176,7 @@ int main(void){
                     int cp=bb_piece_at_rc(&B,promo_tr,promo_tc); /* v12 fix: credit capture on promotion too */
                     pm.cap=cp?abs(cp):0;
                     pm.promo=ch;pm.castle=0;pm.ep_cap=-1;apply(&pm);promo_pending=0;}goto skip;}
-                if(!game_over&&turn==player_color&&(!ai_thinking||ai_is_ponder)&&mx>=BOARD_OX&&mx<BOARD_OX+BRD&&my>=BOARD_OY){
+                if(!game_over&&(turn==player_color||both_human)&&(!ai_thinking||ai_is_ponder)&&mx>=BOARD_OX&&mx<BOARD_OX+BRD&&my>=BOARD_OY){
                     int row,col;px2sq(mx,my,&row,&col);if(!(row>=0&&row<8&&col>=0&&col<8))goto skip;
                     if(sel_r<0){
                         int p_at_sq=-1;
@@ -6207,7 +6207,7 @@ int main(void){
                     int row,col;px2sq(e.button.x,e.button.y,&row,&col);
                     int fr=drag_r,fc=drag_c;
                     drag_active=0;
-                    if(row>=0&&row<8&&col>=0&&col<8&&!(row==fr&&col==fc)&&!game_over&&turn==player_color&&(!ai_thinking||ai_is_ponder)){
+                    if(row>=0&&row<8&&col>=0&&col<8&&!(row==fr&&col==fc)&&!game_over&&(turn==player_color||both_human)&&(!ai_thinking||ai_is_ponder)){
                         if(attempt_move(fr,fc,row,col)){ /* dropped on a legal square: move made, selection cleared by apply() path */ }
                     }
                 }
