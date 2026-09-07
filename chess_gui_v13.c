@@ -2402,12 +2402,15 @@ static void draw_path_dialog(void);
 static void draw_stropt_dialog(void);
 static void draw_uci_options_dialog(void);
 
-/* v12.10: Disable the engine's own PB/Ponder when starting a game.
-   The GUI manages pondering via its own UCI Ponder mechanism; letting
-   the engine also run internal PB causes double-thinking and wasted time. */
+/* v12.10: Disable the engine's own PermanentBrain when starting a game
+   (engines like Sila run their own internal PB and would think on THEIR
+   own outside of any go-ponder, causing double-thinking and wasted time).
+   NOTE: Ponder itself must stay TRUE — a ponder engine with "Ponder=false"
+   silently ignores "go ponder" and stops announcing "bestmove M ponder R",
+   so the GUI's pondering can never start on the opponent's move. */
 static void uci_disable_engine_pb(int ei){
     if(!uci_eng[ei].ready || !UCI_VALID(ei)) return;
-    uci_send_raw(ei, "setoption name Ponder value false");
+    uci_send_raw(ei, "setoption name Ponder value true");
     uci_send_raw(ei, "setoption name PermanentBrain value false");
 }
 static void uci_set_book(int ei, int enable){
