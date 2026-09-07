@@ -498,6 +498,11 @@ static char  path_dialog_buf[260] = "";
 static int   path_dialog_len = 0;
 static int   path_dialog_engine_idx = 0;  /* 0=Engine 1, 1=Engine 2 */
 
+/* v14.3: custom tournament games count input */
+static int   custom_games_dialog_active = 0;
+static char  custom_games_buf[16] = "";
+static int   custom_games_len = 0;
+
 
 /* v10: string option dialog */
 static int   stropt_dialog_active = 0;
@@ -2181,7 +2186,7 @@ static const char*EITEMS[]={
 #define N_ENG (sizeof(EITEMS)/sizeof(EITEMS[0]))
 static const char*TITEMS[]={
     "--- Games ---",
-    "2 games","4 games","10 games","20 games",
+    "2 games","4 games","10 games","20 games","Custom games...",
     "--- White player ---",
     "W: Built-in","W: UCI Engine 1","W: UCI Engine 2","W: Human",
     "--- Black player ---",
@@ -2227,6 +2232,7 @@ static int menu_count(int mi){
 }
 static const char*menu_item(int mi,int ii){
     if(mi==4) return OITEMS[ii];
+    if(mi==3&&ii==5){static char mb[24]; snprintf(mb,sizeof mb,"Custom games... (%d)", tourney_total); return mb;}
     return mi==0?GITEMS[ii]:mi==1?SITEMS[ii]:mi==2?EITEMS[ii]:mi==3?TITEMS[ii]:HITEMS[ii];
 }
 static void draw_menus(int mx,int my){
@@ -2265,7 +2271,7 @@ static void draw_menus(int mx,int my){
                 int is_sep = 0;
                 if(mi==1 && (ii==3||ii==12||ii==20||ii==23)) is_sep=1;
                 if(mi==2 && (ii==0||ii==2||ii==4)) is_sep=1;
-                if(mi==3 && (ii==0||ii==5||ii==10||ii==15)) is_sep=1;
+                if(mi==3 && (ii==0||ii==6||ii==11||ii==16)) is_sep=1;
                 if(is_sep){
                     SDL_SetRenderDrawColor(ren,80,70,50,255);
                     SDL_RenderDrawLine(ren,ix+8,iy2+ih/2,ix+iw-8,iy2+ih/2);
@@ -2302,15 +2308,16 @@ static void draw_menus(int mx,int my){
                     if(ii==2&&tourney_total==4)mk=1;
                     if(ii==3&&tourney_total==10)mk=1;
                     if(ii==4&&tourney_total==20)mk=1;
-                    if(ii==6&&tourney_player[0]==0)mk=1;
-                    if(ii==7&&tourney_player[0]==1)mk=1;
-                    if(ii==8&&tourney_player[0]==2)mk=1;
-                    if(ii==9&&tourney_player[0]==3)mk=1;
-                    if(ii==11&&tourney_player[1]==0)mk=1;
-                    if(ii==12&&tourney_player[1]==1)mk=1;
-                    if(ii==13&&tourney_player[1]==2)mk=1;
-                    if(ii==14&&tourney_player[1]==3)mk=1;
-                    if(ii==16&&tourney_active)mk=1;
+                    if(ii==5&&tourney_total!=2&&tourney_total!=4&&tourney_total!=10&&tourney_total!=20)mk=1;
+                    if(ii==7&&tourney_player[0]==0)mk=1;
+                    if(ii==8&&tourney_player[0]==1)mk=1;
+                    if(ii==9&&tourney_player[0]==2)mk=1;
+                    if(ii==10&&tourney_player[0]==3)mk=1;
+                    if(ii==12&&tourney_player[1]==0)mk=1;
+                    if(ii==13&&tourney_player[1]==1)mk=1;
+                    if(ii==14&&tourney_player[1]==2)mk=1;
+                    if(ii==15&&tourney_player[1]==3)mk=1;
+                    if(ii==17&&tourney_active)mk=1;
                 }
                 if(mk)dtxt_raw(ix+4,iy2+8,"*",1,100,220,100);
                 int txtx = ix+20;
@@ -2389,6 +2396,7 @@ static int  uci_last_mover_ei = -1;         /* which engine produced the current
 static void tourney_begin_game(void);
 static void start_uci_ai_move(int ei);
 static void draw_fen_dialog(void);
+static void draw_custom_games_dialog(void);
 static void draw_path_dialog(void);
 
 static void draw_stropt_dialog(void);
@@ -2443,7 +2451,7 @@ static void handle_menu(int mx,int my){
             int is_sep=0;
             if(mi==1&&(ii==3||ii==12||ii==20||ii==23))is_sep=1;
             if(mi==2&&(ii==0||ii==2||ii==4))is_sep=1;
-            if(mi==3&&(ii==0||ii==5||ii==10||ii==15))is_sep=1;
+            if(mi==3&&(ii==0||ii==6||ii==11||ii==16))is_sep=1;
             if(is_sep) continue;
             if(mx>=ix&&mx<ix+iw&&my>=iy2&&my<iy2+ih){
                 open_menu=-1;
@@ -2590,17 +2598,18 @@ static void handle_menu(int mx,int my){
                     if(ii==1)tourney_total=2;
                     else if(ii==2)tourney_total=4;
                     else if(ii==3)tourney_total=10;
-                    else if(ii==4)tourney_total==20;
-                    else if(ii==6)tourney_player[0]=0;
-                    else if(ii==7)tourney_player[0]=1;
-                    else if(ii==8)tourney_player[0]=2;
-                    else if(ii==9)tourney_player[0]=3;
-                    else if(ii==11)tourney_player[1]=0;
-                    else if(ii==12)tourney_player[1]=1;
-                    else if(ii==13)tourney_player[1]=2;
-                    else if(ii==14)tourney_player[1]=3;
-                    else if(ii==16)tourney_start_now();
-                    else if(ii==17)tourney_stop();
+                    else if(ii==4)tourney_total=20;
+                    else if(ii==5){custom_games_dialog_active=1;custom_games_buf[0]=0;custom_games_len=0;SDL_StartTextInput();open_menu=-1;}
+                    else if(ii==7)tourney_player[0]=0;
+                    else if(ii==8)tourney_player[0]=1;
+                    else if(ii==9)tourney_player[0]=2;
+                    else if(ii==10)tourney_player[0]=3;
+                    else if(ii==12)tourney_player[1]=0;
+                    else if(ii==13)tourney_player[1]=1;
+                    else if(ii==14)tourney_player[1]=2;
+                    else if(ii==15)tourney_player[1]=3;
+                    else if(ii==17)tourney_start_now();
+                    else if(ii==18)tourney_stop();
                 }
                 if(mi==4){
                     /* v12.3: Options menu now just launches the overlay window */
@@ -3643,6 +3652,7 @@ static void render(int mx,int my){
     draw_menus(mx,my);
     if(!ai_thinking)SDL_SetWindowTitle(win,msg);
     /* v9: FEN dialog overlay */
+    if(custom_games_dialog_active) draw_custom_games_dialog();
     if(fen_dialog_active) draw_fen_dialog();
     if(path_dialog_active) draw_path_dialog();
     if(stropt_dialog_active) draw_stropt_dialog();
@@ -5654,6 +5664,24 @@ static void tourney_record_result(void){
 
 
 
+/* v14.3: custom tournament games count dialog */
+static void draw_custom_games_dialog(void){
+    int dw=400,dh=90;
+    int dx=(WIN_W-dw)/2,dy=WIN_H/2-dh/2;
+    SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(ren,0,0,0,180);
+    SDL_Rect ov={0,0,WIN_W,WIN_H};SDL_RenderFillRect(ren,&ov);
+    SDL_SetRenderDrawBlendMode(ren,SDL_BLENDMODE_NONE);
+    frect(dx,dy,dw,dh,28,28,40);orect(dx,dy,dw,dh,100,140,220);
+    dtxt(dx+8,dy+8,"Number of games (1-5000):",1,200,220,255);
+    frect(dx+8,dy+28,dw-16,24,14,14,22);orect(dx+8,dy+28,dw-16,24,70,110,200);
+    char disp[20];
+    strncpy(disp,custom_games_buf,15);disp[15]=0;
+    if((SDL_GetTicks()/500)%2==0)strncat(disp,"|",sizeof(disp)-strlen(disp)-1);
+    dtxt(dx+12,dy+33,disp,1,220,230,255);
+    dtxt(dx+8,dy+62,"Enter = Set    Esc = Cancel",1,120,130,160);
+}
+
 /* ===================== v9: FEN DIALOG DRAWING ===================== */
 static void draw_fen_dialog(void){
     int dw=560,dh=90;
@@ -5901,6 +5929,20 @@ int main(void){
                     if(k==SDLK_ESCAPE){uci_opts_dialog_active=0;}
                     goto skip_normal_keys;
                 }
+                /* v14.3: custom tournament games count dialog */
+                if(custom_games_dialog_active){
+                    if(k==SDLK_ESCAPE){custom_games_dialog_active=0;SDL_StopTextInput();}
+                    else if(k==SDLK_RETURN||k==SDLK_KP_ENTER){
+                        custom_games_dialog_active=0;SDL_StopTextInput();
+                        int n=atoi(custom_games_buf);
+                        if(n>=1&&n<=5000){tourney_total=n;sprintf(msg,"Tournament set to %d games",tourney_total);}
+                        else{strcpy(msg,"Invalid games count (1-5000)");tourney_total=10;}
+                    }
+                    else if(k==SDLK_BACKSPACE&&custom_games_len>0){
+                        custom_games_buf[--custom_games_len]=0;
+                    }
+                    goto skip_normal_keys;
+                }
                 /* v9: FEN dialog keyboard */
                 if(fen_dialog_active){
                     if(ctrl && k==SDLK_v){
@@ -6076,6 +6118,10 @@ int main(void){
                     strncat(stropt_dialog_buf,e.text.text,sizeof(stropt_dialog_buf)-stropt_dialog_len-1);
                     stropt_dialog_len=strlen(stropt_dialog_buf);
                 }
+                if(custom_games_dialog_active&&custom_games_len<(int)sizeof(custom_games_buf)-1){
+                    strncat(custom_games_buf,e.text.text,sizeof(custom_games_buf)-custom_games_len-1);
+                    custom_games_len=strlen(custom_games_buf);
+                }
             }
             if(e.type==SDL_WINDOWEVENT){
                 if(e.window.event==SDL_WINDOWEVENT_RESIZED){
@@ -6096,7 +6142,7 @@ int main(void){
                 }
             }
             if(e.type==SDL_MOUSEBUTTONDOWN){
-                if(fen_dialog_active||path_dialog_active||stropt_dialog_active) goto skip;
+                if(fen_dialog_active||path_dialog_active||stropt_dialog_active||custom_games_dialog_active) goto skip;
                 // v13 CMD: bottom log tabs
                 {
                     int rh = real_h>0?real_h:WIN_H;
