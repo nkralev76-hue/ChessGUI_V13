@@ -223,6 +223,7 @@ static int pgn_replay_auto=0;
 static Uint32 pgn_replay_auto_last=0;
 #define PGN_REPLAY_DELAY 700
 int open_menu=-1;
+static Uint32 menu_outside_t0=0; /* v13.1: grace timer so the dropdown doesn't vanish while the mouse travels to it */
 
 /* v12: slide animation for moved pieces */
 int anim_active=0;
@@ -2377,6 +2378,8 @@ static _Atomic int uci_ponder_cancel = 0;
 static _Atomic int uci_ponder_best_set = 0;
 static Move uci_ponder_best;
 static _Atomic int uci_ponder_waiting = 0;  /* ponderhit sent; the reply is on its way */
+static char uci_ponder_go[128]="go ponder"; /* v13.1: ponder go-command WITH time control (built in start_uci_ponder) */
+static int uci_ponder_budget_ms=1000;       /* movetime budget mirrored into the ponder search */
 /* v12.10 FIX: every UCI move unconditionally does stop + two isready
    round-trips before the real position/go (needed to guard against stale
    bestmove replies -- see uci_thread_func). That handshake takes real
@@ -2456,7 +2459,7 @@ static void handle_menu(int mx,int my){
     int mw=120,mx0=4,gap=4;
     for(int mi=0;mi<N_MENUS;mi++){
         int bx=mx0+mi*(mw+gap);
-        if(mx>=bx&&mx<=bx+mw&&my>=3&&my<=MENU_H-3){open_menu=(open_menu==mi)?-1:mi;return;}
+        if(mx>=bx&&mx<=bx+mw&&my>=3&&my<=MENU_H-3){open_menu=(open_menu==mi)?-1:mi;menu_outside_t0=0;return;}
     }
     if(open_menu>=0){
         int mi=open_menu,n=menu_count(mi),ih=26,iw=(mi==5)?320:220,ix=mx0+mi*(mw+gap),iy=MENU_H;
@@ -2638,6 +2641,9 @@ static void handle_menu(int mx,int my){
                 return;
             }
         }
+        /* v13.1: click missed every item — close the menu (with the motion
+           grace above, an outside click is now the way to dismiss it). */
+        open_menu=-1;
     }
 }
 
@@ -5321,13 +5327,16 @@ static int uci_ponder_thread_func(void *data){
     uci_ponder_best_set=0; uci_ponder_best.fr=-1;
     uci_dbg_log("PONDER",ei,uci_ponder_pos);
     uci_send_raw(ei,uci_ponder_pos);
-    uci_send_raw(ei,"go ponder");
+    uci_send_raw(ei,uci_ponder_go);
     Uint32 hit_t0=0;
     char buf[1024];
     while(!uci_ponder_cancel){
         if(uci_ponder_waiting){
             if(hit_t0==0) hit_t0=SDL_GetTicks();
-            if(SDL_GetTicks()-hit_t0>20000){
+            /* v13.1: budget-scaled fallback (mirrors the normal-search wait
+               budget time_ms*4+15000). The old fixed 20s fired both too late
+               for short controls and too early for long ones. */
+            if(SDL_GetTicks()-hit_t0>(Uint32)(uci_ponder_budget_ms*4+15000)){
                 /* engine did not answer the ponderhit: fall back to a normal search */
                 uci_dbg_log("PONDER",ei,"ponderhit timeout -> normal search");
                 ai_result.fr=-1; ai_done=1; ai_thinking=0;
@@ -5420,6 +5429,20 @@ static void start_uci_ponder(int ei){
     while(uci_ponder_alive && _w<60){ SDL_Delay(2); _w++; }
     if(uci_ponder_alive) return;
     uci_build_position_extra(uci_ponder_pos,sizeof(uci_ponder_pos),&R);
+    /* v13.1: Arena-style time control on the ponder search. A bare "go ponder"
+       carries no limit, so after "ponderhit" engines like Stockfish searched
+       forever: every ponder HIT burned the ponderhit-timeout plus a full fresh
+       search — ponder ON played far slower than ponder OFF or Arena. Mirror
+       the normal-search budget from start_uci_ai_move here. */
+    int p_eng_white=(turn==BLACK); /* turn already flipped to the opponent */
+    int p_my=p_eng_white?(int)clk_w:(int)clk_b;
+    int p_bud=p_my/40+(int)increment;
+    if(p_bud<50)p_bud=50;
+    if(p_bud>p_my/4)p_bud=p_my/4;
+    uci_ponder_budget_ms=p_bud;
+    snprintf(uci_ponder_go,sizeof(uci_ponder_go),
+        "go ponder wtime %u btime %u winc %u binc %u movetime %d",
+        clk_w,clk_b,increment,increment,p_bud);
     uci_ponder_predicted=R;
     uci_ponder_ei=ei;
     uci_ponder_cancel=0;
@@ -5929,12 +5952,21 @@ int main(void){
                     int mw2=120,mx02=4,gap2=4;
                     int overBar=-1;
                     for(int mi2=0;mi2<N_MENUS;mi2++){int bx2=mx02+mi2*(mw2+gap2); if(mx>=bx2&&mx<=bx2+mw2&&my>=3&&my<=MENU_H-3) overBar=mi2;}
-                    if(overBar>=0 && overBar!=open_menu) open_menu=overBar;
-                    else if(overBar==-1){
+                    if(overBar>=0 && overBar!=open_menu){ open_menu=overBar; menu_outside_t0=0; }
+                    else{
                         int mi=open_menu,n=menu_count(mi),ih=26,iw=(mi==5)?320:220,ix=mx02+mi*(mw2+gap2),iy=MENU_H;
                         if(ix+iw>WIN_W) ix=WIN_W-iw-2;
                         int overDrop=(mx>=ix&&mx<ix+iw&&my>=iy&&my<iy+4+n*ih);
-                        if(!overDrop) open_menu=-1;
+                        /* v13.1: 250ms grace before auto-closing — without it a
+                           single motion event outside the rect (e.g. while the
+                           mouse travels from the bar to the item) killed the
+                           menu before the click could land. */
+                        if(overBar==open_menu||overDrop) menu_outside_t0=0;
+                        else{
+                            Uint32 mnow=SDL_GetTicks();
+                            if(menu_outside_t0==0) menu_outside_t0=mnow;
+                            else if(mnow-menu_outside_t0>250){ open_menu=-1; menu_outside_t0=0; }
+                        }
                     }
                 }
             }
