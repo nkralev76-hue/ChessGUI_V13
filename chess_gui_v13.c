@@ -2412,6 +2412,19 @@ static void uci_disable_engine_pb(int ei){
     if(!uci_eng[ei].ready || !UCI_VALID(ei)) return;
     uci_send_raw(ei, "setoption name Ponder value true");
     uci_send_raw(ei, "setoption name PermanentBrain value false");
+    /* v13 FIX: keep the GUI's own gate flag in sync with what was just
+       forced on the engine. Without this, uci_engine_ponder_enabled()
+       kept reading the engine's declared default (false for most engines
+       unless the user manually ticked "Ponder" in the UCI Options dialog
+       beforehand), so start_uci_ponder() silently never fired for a
+       freshly loaded external engine even though the engine itself was
+       told Ponder=true and would happily answer "go ponder". */
+    for(int i=0;i<uci_eng[ei].num_options;i++){
+        if(strcmp(uci_eng[ei].options[i].name,"Ponder")==0){
+            uci_eng[ei].options[i].cur_check = 1;
+            break;
+        }
+    }
 }
 static void uci_set_book(int ei, int enable){
     if(!uci_eng[ei].ready || !UCI_VALID(ei)) return;
